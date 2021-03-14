@@ -1,0 +1,1 @@
+using namespace Microsoft.PowerShell.SecretManagement
