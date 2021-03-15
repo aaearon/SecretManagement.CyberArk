@@ -18,11 +18,18 @@ function Get-Secret {
         $Account = $results
     }
 
-    if ($AdditionalParameters.Reason) {
-        $AccountSecret = Get-PASAccountPassword -AccountID $Account.Id -Reason $AdditionalParameters.Reason
-    } else {
-        $AccountSecret = Get-PASAccountPassword -AccountID $Account.Id
-    }
+    $GetPASAccountPasswordParameters = @{}
+    $GetPASAccountPasswordParameters.Add("AccountId", $Account.Id)
+    if ($AdditionalParameters.Reason) {$GetPASAccountPasswordParameters.Add("Reason", $AdditionalParameters.Reason)}
+    if ($AdditionalParameters.TicketingSystem) {$GetPASAccountPasswordParameters.Add("TicketingSystem", $AdditionalParameters.TicketingSystem)}
+    if ($AdditionalParameters.TicketId) {$GetPASAccountPasswordParameters.Add("TicketId", $AdditionalParameters.TicketId)}
+    if ($AdditionalParameters.Version) {$GetPASAccountPasswordParameters.Add("Version", $AdditionalParameters.Version)}
+    if ($AdditionalParameters.ActionType) {$GetPASAccountPasswordParameters.Add("ActionType", $AdditionalParameters.ActionType)}
+    if ($AdditionalParameters.isUse) {$GetPASAccountPasswordParameters.Add("isUse", $AdditionalParameters.isUse)}
+    if ($AdditionalParameters.Machine) {$GetPASAccountPasswordParameters.Add("Machine", $AdditionalParameters.Machine)}
+
+    $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
+    
     $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
     return $Credential
 }
