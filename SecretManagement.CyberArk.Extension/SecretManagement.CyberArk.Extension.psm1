@@ -1,6 +1,3 @@
-#using namespace System.Collections.ObjectModel
-#using namespace System.Collections.Generic
-
 function Get-Secret {
     [CmdletBinding()]
     param (
@@ -18,6 +15,7 @@ function Get-Secret {
         $Account = $results
     }
 
+    # https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_splatting?view=powershell-7.1
     $GetPASAccountPasswordParameters = @{}
     $GetPASAccountPasswordParameters.Add("AccountId", $Account.Id)
     if ($AdditionalParameters.Reason) {$GetPASAccountPasswordParameters.Add("Reason", $AdditionalParameters.Reason)}
@@ -29,7 +27,7 @@ function Get-Secret {
     if ($AdditionalParameters.Machine) {$GetPASAccountPasswordParameters.Add("Machine", $AdditionalParameters.Machine)}
 
     $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
-    
+
     $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
     return $Credential
 }
@@ -75,9 +73,10 @@ function Remove-Secret
 
     if ($results.Count -gt 1) {
         Write-Error "Multiple matches found with name $Name. Not deleting anything."
+        return $false
+    } else {
+        $results | Remove-PASAccount
     }
-
-    $results | Remove-PASAccount
     return $?
 }
 
@@ -90,7 +89,14 @@ function Set-Secret {
         [hashtable] $AdditionalParameters
     )
 
-    [pscustomobject]$AdditionalParameters | Add-PASAccount -password $Password
+    $AddPASAccountParameters = @{}
+    if ($Name) {$AddPASAccountParameters.Add("name", $Name)}
+    if ($AdditionalParameters.userName) {$AddPASAccountParameters.Add("userName", $AdditionalParameters.userName)}
+    if ($AdditionalParameters.address) {$AddPASAccountParameters.Add("address", $AdditionalParameters.address)}
+    if ($AdditionalParameters.safeName) {$AddPASAccountParameters.Add("safeName", $AdditionalParameters.safeName)}
+    if ($AdditionalParameters.platformId) {$AddPASAccountParameters.Add("platformId", $AdditionalParameters.platformId)}
+
+    Add-PASAccount @AddPASAccountParameters -secret $Secret
     return $?
 }
 
