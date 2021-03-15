@@ -1,5 +1,6 @@
-using namespace System.Collections.ObjectModel
-using namespace System.Collections.Generic
+#using namespace System.Collections.ObjectModel
+#using namespace System.Collections.Generic
+
 function Get-Secret {
     [CmdletBinding()]
     param (
@@ -44,12 +45,14 @@ function Get-SecretInfo {
     }
 
     $Metadata = [Ordered]@{}
-    $Account.psobject.properties | ForEach-Object { $Metadata[$PSItem.Name] = $PSItem.Value } | ConvertTo-ReadOnlyDictionary
+    $Account.psobject.properties | ForEach-Object { $Metadata[$PSItem.Name] = $PSItem.Value }
+    $Metadata = ConvertTo-ReadOnlyDictionary -Hashtable $Metadata
 
     return @(,[Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
         "$($Account.name)",        # Name of secret
         [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential,      # Secret data type [Microsoft.PowerShell.SecretManagement.SecretType]
-        $VaultName))    # Name of vault
+        $VaultName,     # Name of vault
+        $Metadata))     # Optional Metadata parameter
 }
 
 function Remove-Secret
@@ -80,8 +83,8 @@ function Set-Secret {
         [hashtable] $AdditionalParameters
     )
 
-    return $true
-    
+    [pscustomobject]$AdditionalParameters | Add-PASAccount -password $Password
+    return $?
 }
 
 function Test-SecretVault
@@ -93,7 +96,6 @@ function Test-SecretVault
         [Parameter(ValueFromPipelineByPropertyName)]
         [hashtable] $AdditionalParameters
     )
-    Write-Host $AdditionalParameters.hi
     return Get-PASSession
 }
 
@@ -106,13 +108,13 @@ function ConvertTo-ReadOnlyDictionary {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(ValueFromPipeline)][hashtable]$hashtable
+        [Parameter(ValueFromPipeline)][Hashtable]$Hashtable
     )
     process {
-        $dictionary = [Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
-        $hashtable.GetEnumerator().foreach{
+        $dictionary = [System.Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
+        $Hashtable.GetEnumerator().foreach{
             $dictionary[$_.Name] = $_.Value
         }
-        [ReadOnlyDictionary[string,object]]::new($dictionary)
+        [System.Collections.ObjectModel.ReadOnlyDictionary[string,object]]::new($dictionary)
     }
 }
