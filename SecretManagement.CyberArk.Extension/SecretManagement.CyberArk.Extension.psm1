@@ -6,6 +6,8 @@ function Get-Secret {
         [hashtable] $AdditionalParameters
     )
 
+    Test-PASSession
+
     $results = Get-PASAccount -search "$Name"
 
     if ($results.Count -gt 1) {
@@ -27,7 +29,6 @@ function Get-Secret {
     if ($AdditionalParameters.Machine) {$GetPASAccountPasswordParameters.Add("Machine", $AdditionalParameters.Machine)}
 
     $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
-
     $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
     return $Credential
 }
@@ -39,6 +40,8 @@ function Get-SecretInfo {
         [string] $VaultName,
         [hashtable] $AdditionalParameters
     )
+
+    Test-PASSession
 
     $results = Get-PASAccount -search "$Filter"
 
@@ -69,6 +72,8 @@ function Remove-Secret
         [hashtable] $AdditionalParameters
     )
 
+    Test-PASSession
+
     $results = Get-PASAccount -search "$Name"
 
     if ($results.Count -gt 1) {
@@ -77,7 +82,6 @@ function Remove-Secret
     } else {
         $results | Remove-PASAccount
     }
-    return $?
 }
 
 function Set-Secret {
@@ -88,6 +92,8 @@ function Set-Secret {
         [string] $VaultName,
         [hashtable] $AdditionalParameters
     )
+
+    Test-PASSession
 
     $AddPASAccountParameters = @{}
     if ($Name) {$AddPASAccountParameters.Add("name", $Name)}
@@ -109,7 +115,8 @@ function Test-SecretVault
         [Parameter(ValueFromPipelineByPropertyName)]
         [hashtable] $AdditionalParameters
     )
-    return Get-PASSession
+    
+    Test-PASSession
 }
 
 
@@ -130,4 +137,13 @@ function ConvertTo-ReadOnlyDictionary {
         }
         [System.Collections.ObjectModel.ReadOnlyDictionary[string,object]]::new($dictionary)
     }
+}
+
+function Test-PASSession {
+    try {
+        $null = Get-PASSession
+    } catch {
+        throw "Failed to get PASSession. Run New-PASSession again."
+    }
+    
 }
