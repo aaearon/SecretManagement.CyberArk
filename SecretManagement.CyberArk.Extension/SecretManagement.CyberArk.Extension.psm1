@@ -51,23 +51,23 @@ function Get-SecretInfo {
 
     $results = Get-PASAccount -search "$Filter"
 
-    if ($results.Count -gt 1) {
-        Write-Warning "Multiple matches found with name $Name. Returning the first match."
-        $Account = $results[0]
-    }
-    else {
-        $Account = $results
-    }
+    $Secrets = New-Object System.Collections.Generic.List[System.Object]
+    
+    foreach ($Account in $results) {
+        $Metadata = [Ordered]@{}
+        $Account.psobject.properties | ForEach-Object { $Metadata[$PSItem.Name] = $PSItem.Value }
+        $Metadata = ConvertTo-ReadOnlyDictionary -Hashtable $Metadata
 
-    $Metadata = [Ordered]@{}
-    $Account.psobject.properties | ForEach-Object { $Metadata[$PSItem.Name] = $PSItem.Value }
-    $Metadata = ConvertTo-ReadOnlyDictionary -Hashtable $Metadata
-
-    return @(, [Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
+        $SecretInfo = [Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
             "$($Account.name)", # Name of secret
             [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential, # Secret data type [Microsoft.PowerShell.SecretManagement.SecretType]
             $VaultName, # Name of vault
-            $Metadata))     # Optional Metadata parameter
+            $Metadata)  # Optional Metadata parameter)
+
+        $Secrets.Add($SecretInfo)
+    }
+
+    return $Secrets
 }
 
 function Remove-Secret {
