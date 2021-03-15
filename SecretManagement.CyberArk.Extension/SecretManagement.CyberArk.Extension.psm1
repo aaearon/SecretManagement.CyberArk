@@ -28,9 +28,13 @@ function Get-Secret {
     if ($AdditionalParameters.isUse) {$GetPASAccountPasswordParameters.Add("isUse", $AdditionalParameters.isUse)}
     if ($AdditionalParameters.Machine) {$GetPASAccountPasswordParameters.Add("Machine", $AdditionalParameters.Machine)}
 
-    $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
-    $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
-    return $Credential
+    try {
+        $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
+        $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
+        return $Credential 
+    } catch {
+        return $null
+    }
 }
 
 function Get-SecretInfo {
