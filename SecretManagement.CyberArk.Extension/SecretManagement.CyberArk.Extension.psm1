@@ -8,7 +8,11 @@ function Get-Secret {
 
     Test-PASSession
 
-    $results = Get-PASAccount -search "$Name"
+    $GetPASAccountParameters = @{}
+    $GetPASAccountParameters.Add("search", $Name)
+    if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add("safeName", $AdditionalParameters.safeName) }
+
+    $results = Get-PASAccount @GetPASAccountParameters
 
     if ($results.Count -gt 1) {
         Write-Warning "Multiple matches found with name $Name. Returning the first match."
@@ -59,7 +63,7 @@ function Get-SecretInfo {
         $Metadata = ConvertTo-ReadOnlyDictionary -Hashtable $Metadata
 
         $SecretInfo = [Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
-            "$($Account.name)", # Name of secret
+            "$Account.name", # Name of secret
             [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential, # Secret data type [Microsoft.PowerShell.SecretManagement.SecretType]
             $VaultName, # Name of vault
             $Metadata)  # Optional Metadata parameter)
