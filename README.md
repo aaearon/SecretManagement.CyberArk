@@ -6,7 +6,9 @@ A [SecretManagement](https://github.com/powershell/secretmanagement) extension f
 * The [SecretManagement](https://github.com/powershell/secretmanagement) Powershell module
 
 ## Installation
-It is not yet available in the PowerShell Gallery as I want it to be a bit more mature so as of now it needs to be installed by hand.
+From PowerShell Gallery
+
+`Install-Module SecretManagement.CyberArk`
 
 ## Registration
 Once installed, it must be registered as an extension for `SecretManagement`.
