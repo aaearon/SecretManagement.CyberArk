@@ -3,25 +3,32 @@ function Get-Secret {
     param (
         [string] $Name,
         [string] $VaultName,
-        [hashtable] $AdditionalParameters
+        [hashtable] $AdditionalParameters,
+        [Parameter(ValueFromPipeline = $true)]
+        [object] $PASAccount
     )
 
     Test-PASSession
 
-    $GetPASAccountParameters = @{}
-    $GetPASAccountParameters.Add("search", $Name)
-    if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add("safeName", $AdditionalParameters.safeName) }
-
-    $results = Get-PASAccount @GetPASAccountParameters
-
-    if ($results.Count -gt 1) {
-        Write-Warning "Multiple matches found with name $Name. Returning the first match."
-        $Account = $results[0]
+    if ($PASAccount) {
+        $Account = Get-PASAccount -id $PASAccount.Id
     }
     else {
-        $Account = $results
+        $GetPASAccountParameters = @{}
+        $GetPASAccountParameters.Add("search", $Name)
+        if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add("safeName", $AdditionalParameters.safeName) }
+    
+        $results = Get-PASAccount @GetPASAccountParameters
+        
+        if ($results.Count -gt 1) {
+            Write-Warning "Multiple matches found with name $Name. Returning the first match."
+            $Account = $results[0]
+        }
+        else {
+            $Account = $results
+        }
     }
-
+    
     # https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_splatting?view=powershell-7.1
     $GetPASAccountPasswordParameters = @{}
     $GetPASAccountPasswordParameters.Add("AccountId", $Account.Id)
