@@ -51,7 +51,7 @@ PowerShellVersion = '5.1'
 # ProcessorArchitecture = ''
 
 # Modules that must be imported into the global environment prior to importing this module
-# RequiredModules = @()
+RequiredModules = @('psPAS')
 
 # Assemblies that must be loaded prior to importing this module
 # RequiredAssemblies = @()
@@ -98,10 +98,10 @@ PrivateData = @{
         Tags = @('SecretManagement', 'CyberArk')
 
         # A URL to the license for this module.
-        # LicenseUri = ''
+        LicenseUri = 'https://github.com/aaearon/SecretManagement.CyberArk/blob/main/LICENSE'
 
         # A URL to the main website for this project.
-        # ProjectUri = ''
+        ProjectUri = 'https://github.com/aaearon/SecretManagement.CyberArk'
 
         # A URL to an icon representing this module.
         # IconUri = ''
