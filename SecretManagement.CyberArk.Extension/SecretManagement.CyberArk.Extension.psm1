@@ -70,7 +70,7 @@ function Get-SecretInfo {
         $Metadata = ConvertTo-ReadOnlyDictionary -Hashtable $Metadata
 
         $SecretInfo = [Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
-            "$Account.name", # Name of secret
+            "$($Account.name)", # Name of secret
             [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential, # Secret data type [Microsoft.PowerShell.SecretManagement.SecretType]
             $VaultName, # Name of vault
             $Metadata)  # Optional Metadata parameter)
