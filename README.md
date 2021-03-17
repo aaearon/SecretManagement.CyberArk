@@ -19,6 +19,10 @@ You use the typical `SecretManagement` commands such as `Get-Secret` and `Set-Se
 ### Examples
 To retrieve the password for an account named `localAdmin01`:
 
+`Get-PASAccount -search localAdmin01 -safeName Windows | Get-Secret`
+
+or
+
 `Get-Secret -Name localAdmin01`
 
 Note: If multiple results are returned from CyberArk the first one is provided.
@@ -41,4 +45,4 @@ $NewCredentialProperties = @{
 Set-Secret -Secret $Secret -AdditionalProperties $NewCredentialProperties
 ```
 
-Note: The `Name` argument should not be used. If you want to explicitly define the name of the new credential you are adding to CyberArk then define `name` as a key inside the Hashtable passed as `AdditionalProperties`.
+Note: The value passed to the `Name` argument will be used as the `name` property for the account in CyberArk. If you want CyberArk to generate the name for the account automatically, do not use the `Name` argument.
