@@ -31,7 +31,7 @@ Note: If multiple results are returned from CyberArk the first one is provided.
 
 To retrieve the password for an account named `linuxAdmin01` where policy requires a reason:
 
-`Get-Secret -Name localAdmin01 -AdditionalProperties @{Reason="To do things"}`
+`Get-Secret -Name localAdmin01 -AdditionalParameters @{Reason="To do things"}`
 
 To create a new credential in the Vault use:
 
@@ -39,12 +39,12 @@ To create a new credential in the Vault use:
 $Secret = ConvertTo-SecureString "verySecret!" -AsPlainText -Force
 
 $NewCredentialProperties = @{
-    address="iosharp.lab"; 
-    userName="localAdmin10"; 
-    platformId="WindowsDomainAccount"; 
-    safeName="Windows"} 
+    address="iosharp.lab";
+    userName="localAdmin10";
+    platformId="WindowsDomainAccount";
+    safeName="Windows"}
 
-Set-Secret -Secret $Secret -AdditionalProperties $NewCredentialProperties
+Set-Secret -Secret $Secret -AdditionalParameters $NewCredentialProperties
 ```
 
 Note: The value passed to the `Name` argument will be used as the `name` property for the account in CyberArk. If you want CyberArk to generate the name for the account automatically, do not use the `Name` argument.

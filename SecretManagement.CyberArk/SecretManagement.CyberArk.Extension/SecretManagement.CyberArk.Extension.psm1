@@ -17,9 +17,9 @@ function Get-Secret {
         $GetPASAccountParameters = @{}
         $GetPASAccountParameters.Add("search", $Name)
         if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add("safeName", $AdditionalParameters.safeName) }
-    
+
         $results = Get-PASAccount @GetPASAccountParameters
-        
+
         if ($results.Count -gt 1) {
             Write-Warning "Multiple matches found with name $Name. Returning the first match."
             $Account = $results[0]
@@ -28,7 +28,7 @@ function Get-Secret {
             $Account = $results
         }
     }
-    
+
     # https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_splatting?view=powershell-7.1
     $GetPASAccountPasswordParameters = @{}
     $GetPASAccountPasswordParameters.Add("AccountId", $Account.Id)
@@ -43,7 +43,7 @@ function Get-Secret {
     try {
         $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
         $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
-        return $Credential 
+        return $Credential
     }
     catch {
         return $null
@@ -63,11 +63,10 @@ function Get-SecretInfo {
     $results = Get-PASAccount -search "$Filter"
 
     $Secrets = New-Object System.Collections.Generic.List[System.Object]
-    
+
     foreach ($Account in $results) {
         $Metadata = [Ordered]@{}
         $Account.psobject.properties | ForEach-Object { $Metadata[$PSItem.Name] = $PSItem.Value }
-        $Metadata = ConvertTo-ReadOnlyDictionary -Hashtable $Metadata
 
         $SecretInfo = [Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
             "$($Account.name)", # Name of secret
@@ -130,29 +129,9 @@ function Test-SecretVault {
         [Parameter(ValueFromPipelineByPropertyName)]
         [hashtable] $AdditionalParameters
     )
-    
-    Test-PASSession 
+
+    Test-PASSession
     return $true
-}
-
-
-function ConvertTo-ReadOnlyDictionary {
-    <#
-        .SYNOPSIS
-        Converts a hashtable to a ReadOnlyDictionary[String,Object]. Needed for SecretInformation
-        https://github.com/PowerShell/SecretManagement/issues/108#issue-821736250
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(ValueFromPipeline)][Hashtable]$Hashtable
-    )
-    process {
-        $dictionary = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::OrdinalIgnoreCase)
-        $Hashtable.GetEnumerator().foreach{
-            $dictionary[$_.Name] = $_.Value
-        }
-        [System.Collections.ObjectModel.ReadOnlyDictionary[string, object]]::new($dictionary)
-    }
 }
 
 function Test-PASSession {
@@ -162,5 +141,5 @@ function Test-PASSession {
     catch {
         throw "Failed to get PASSession. Run New-PASSession again."
     }
-    
+
 }
