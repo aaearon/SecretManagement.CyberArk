@@ -106,7 +106,9 @@ function Set-Secret {
         [string] $Name,
         [object] $Secret,
         [string] $VaultName,
-        [hashtable] $AdditionalParameters
+        [hashtable] $AdditionalParameters,
+        [Parameter(Mandatory = $true)][string] $platformId,
+        [Parameter(Mandatory = $true)][string] $safeName
     )
 
     Test-PASSession
@@ -115,10 +117,9 @@ function Set-Secret {
     if ($Name) { $AddPASAccountParameters.Add("name", $Name) }
     if ($AdditionalParameters.userName) { $AddPASAccountParameters.Add("userName", $AdditionalParameters.userName) }
     if ($AdditionalParameters.address) { $AddPASAccountParameters.Add("address", $AdditionalParameters.address) }
-    if ($AdditionalParameters.safeName) { $AddPASAccountParameters.Add("safeName", $AdditionalParameters.safeName) }
-    if ($AdditionalParameters.platformId) { $AddPASAccountParameters.Add("platformId", $AdditionalParameters.platformId) }
+    if ($Secret) { $AddPASAccountParameters.Add("secret", $Secret) }
 
-    Add-PASAccount @AddPASAccountParameters -secret $Secret
+    Add-PASAccount @AddPASAccountParameters -safeName $safeName -platformId $platformId
 }
 
 function Test-SecretVault {
