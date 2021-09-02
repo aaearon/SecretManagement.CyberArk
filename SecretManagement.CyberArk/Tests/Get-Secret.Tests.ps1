@@ -56,4 +56,8 @@ Describe "Get-Secret" {
         Get-Secret -name 'admin'
         Should -Invoke -CommandName Write-Warning
     }
+
+    It 'should have a PASAccount parameter' {
+        'PASAccount' | Should -BeIn ((Get-Command -Module $ExtensionModule.Name -Name 'Get-Secret').Parameters.Keys)
+    }
 }
