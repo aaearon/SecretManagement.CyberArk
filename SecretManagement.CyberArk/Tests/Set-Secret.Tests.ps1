@@ -13,7 +13,15 @@
     It "calls Add-PASAccount" {
         Mock Add-PASAccount -MockWith {}
 
-        Set-Secret -name 'test' -AdditionalParameters @{platformId = 'Test'; safeName = 'TestSafe' } -secret ('test' | ConvertTo-SecureString -AsPlainText -Force)
+        Set-Secret -name 'test' -platformId 'Test' -safeName 'TestSafe' -secret ('test' | ConvertTo-SecureString -AsPlainText -Force)
         Should -Invoke -CommandName Add-PASAccount
     }
+
+    It "should have a <Name> parameter" {
+        $AllParameters = (Get-Command -Module $ExtensionModule.Name -Name 'Set-Secret').Parameters.Keys
+        $Name | Should -BeIn $AllParameters
+    } -TestCases @(
+        @{Name = 'platformId' }
+        @{Name = 'safeName' }
+    )
 }
