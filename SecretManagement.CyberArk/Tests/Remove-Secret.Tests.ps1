@@ -1,23 +1,22 @@
-﻿Describe "Remove-Secret" {
-    BeforeAll {
-        Get-Module 'SecretManagement.CyberArk' | Remove-Module -Force
-        Get-Module 'Microsoft.Powershell.SecretManagement' | Remove-Module -Force
+﻿BeforeAll {
+    Get-Module 'SecretManagement.CyberArk' | Remove-Module -Force
+    Get-Module 'Microsoft.Powershell.SecretManagement' | Remove-Module -Force
 
-        $ExtensionModule = Import-Module "$PSScriptRoot/../SecretManagement.CyberArk.Extension/*.psd1" -Force -PassThru
+    $ExtensionModule = Import-Module "$PSScriptRoot/../SecretManagement.CyberArk.Extension/*.psd1" -Force -PassThru
 
-        Mock Get-PASAccount -MockWith {
-            return [PSCustomObject]@{
-                name     = 'localAdmin01'
-                userName = 'localAdmin01'
-                Id       = '1'
-            }
+    Mock Get-PASAccount -MockWith {
+        return [PSCustomObject]@{
+            name     = 'localAdmin01'
+            userName = 'localAdmin01'
+            Id       = '1'
         }
-    }
+    } -ModuleName $ExtensionModule.Name
+}
 
-    AfterAll {
-        Remove-Module $ExtensionModule -Force
-    }
-
+AfterAll {
+    Remove-Module $ExtensionModule -Force
+}
+Describe "Remove-Secret" {
     It "writes an error when more than one account is found" {
         Mock Get-PASAccount -MockWith {
             $Results = @(
@@ -33,17 +32,17 @@
                 }
             )
             return $Results
-        }
-        Mock Write-Error -MockWith {}
+        } -ModuleName $ExtensionModule.Name
+        Mock Write-Error -MockWith {} -ModuleName $ExtensionModule.Name
 
         Remove-Secret -name 'admin'
-        Should -Invoke -CommandName Write-Error
+        Should -Invoke -CommandName Write-Error -ModuleName $ExtensionModule.Name
     }
 
     It "removes a secret from the vault" {
-        Mock Remove-PASAccount -MockWith {}
+        Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
         Remove-Secret -name 'localAdmin01'
-        Should -Invoke -CommandName Remove-PASAccount
+        Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name
     }
 }
