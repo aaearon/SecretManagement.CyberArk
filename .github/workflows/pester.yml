@@ -12,4 +12,4 @@ jobs:
       - name: Perform a Pester test from the Tests.ps1 file
         shell: pwsh
         run: |
-          Invoke-Pester SecretManagement.CyberArk/Tests/* -Passthru
+          Invoke-Pester ./SecretManagement.CyberArk/Tests/* -Passthru
