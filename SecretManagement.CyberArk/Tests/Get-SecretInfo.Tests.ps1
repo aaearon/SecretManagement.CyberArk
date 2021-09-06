@@ -2,6 +2,7 @@
     Get-Module 'SecretManagement.CyberArk' | Remove-Module -Force
     Get-Module 'Microsoft.Powershell.SecretManagement' | Remove-Module -Force
 
+    Import-Module Microsoft.PowerShell.SecretManagement
     $ExtensionModule = Import-Module "$PSScriptRoot/../SecretManagement.CyberArk.Extension/*.psd1" -Force -PassThru
 
     Mock Get-PASAccount -MockWith {
