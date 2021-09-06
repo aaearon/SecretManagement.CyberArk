@@ -21,7 +21,7 @@ function Get-Secret {
         $results = Get-PASAccount @GetPASAccountParameters
 
         if ($results.Count -gt 1) {
-            Write-Warning "Multiple matches found with name $Name. Returning the first match."
+            Write-Warning -Message "Multiple matches found with name $Name. Returning the first match."
             $Account = $results[0]
         }
         else {
@@ -93,7 +93,7 @@ function Remove-Secret {
     $results = Get-PASAccount -search "$Name"
 
     if ($results.Count -gt 1) {
-        Write-Error "Multiple matches found with name $Name. Not deleting anything."
+        Write-Error -Message "Multiple matches found with name $Name. Not deleting anything."
     }
     else {
         $results | Remove-PASAccount
