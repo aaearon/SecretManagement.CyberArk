@@ -9,7 +9,12 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
+      - name: Installs psPAS
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module psPAS
       - name: Perform a Pester test from the Tests.ps1 file
         shell: pwsh
         run: |
-          Invoke-Pester * -Passthru
+          Invoke-Pester ./SecretManagement.CyberArk/Tests/*.Tests.ps1 -Passthru
