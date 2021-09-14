@@ -1,10 +1,8 @@
-name: Test PowerShell on Ubuntu
-
-on: push
-
+name: Run Pester tests on Ubuntu
+on: [push, pull_request]
 jobs:
   pester-test:
-    name: Pester test
+    name: Run Pester tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
