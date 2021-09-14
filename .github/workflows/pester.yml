@@ -1,15 +1,19 @@
-name: Test PowerShell on Ubuntu
-
-on: push
-
+name: Run Pester tests on Ubuntu
+on: [push, pull_request]
 jobs:
   pester-test:
-    name: Pester test
+    name: Run Pester tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Perform a Pester test from the Tests.ps1 file
+      - name: Installs dependencies
         shell: pwsh
         run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module psPAS, Microsoft.PowerShell.SecretManagement
+      - name: Executes Pester tests
+        shell: pwsh
+        run: |
+          Import-Module Microsoft.PowerShell.SecretManagement -Force
           Invoke-Pester ./SecretManagement.CyberArk/Tests/*.Tests.ps1 -Passthru
