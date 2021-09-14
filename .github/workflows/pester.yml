@@ -13,7 +13,7 @@ jobs:
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module psPAS
+          Install-Module psPAS, Microsoft.PowerShell.SecretManagement
       - name: Perform a Pester test from the Tests.ps1 file
         shell: pwsh
         run: |
