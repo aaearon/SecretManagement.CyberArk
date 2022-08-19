@@ -14,14 +14,15 @@ function Get-Secret {
         $Account = Get-PASAccount -id $PASAccount.Id
     }
     else {
-        $GetPASAccountParameters = @{}
-        $GetPASAccountParameters.Add("search", $Name)
+        $GetPASAccountParameters = @{
+            search = $Name
+        }
         if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add("safeName", $AdditionalParameters.safeName) }
 
         $results = Get-PASAccount @GetPASAccountParameters
 
         if ($results.Count -gt 1) {
-            Write-Warning -Message "Multiple matches found with name $Name. Returning the first match."
+            Write-Warning "Multiple matches found with name $Name. Returning the first match."
             $Account = $results[0]
         }
         else {
@@ -29,9 +30,9 @@ function Get-Secret {
         }
     }
 
-    # https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_splatting?view=powershell-7.1
-    $GetPASAccountPasswordParameters = @{}
-    $GetPASAccountPasswordParameters.Add("AccountId", $Account.Id)
+    $GetPASAccountPasswordParameters = @{
+        AccountId = $Account.Id
+    }
     if ($AdditionalParameters.Reason) { $GetPASAccountPasswordParameters.Add("Reason", $AdditionalParameters.Reason) }
     if ($AdditionalParameters.TicketingSystem) { $GetPASAccountPasswordParameters.Add("TicketingSystem", $AdditionalParameters.TicketingSystem) }
     if ($AdditionalParameters.TicketId) { $GetPASAccountPasswordParameters.Add("TicketId", $AdditionalParameters.TicketId) }
@@ -93,7 +94,7 @@ function Remove-Secret {
     $results = Get-PASAccount -search "$Name"
 
     if ($results.Count -gt 1) {
-        Write-Error -Message "Multiple matches found with name $Name. Not deleting anything."
+        Write-Error "Multiple matches found with name $Name. Not deleting anything."
     }
     else {
         $results | Remove-PASAccount
