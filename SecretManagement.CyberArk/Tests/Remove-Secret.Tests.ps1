@@ -16,8 +16,8 @@
 AfterAll {
     Remove-Module $ExtensionModule -Force
 }
-Describe "Remove-Secret" {
-    It "writes an error when more than one account is found" {
+Describe 'Remove-Secret' {
+    It 'writes an error when more than one account is found' {
         Mock Get-PASAccount -MockWith {
             $Results = @(
                 [PSCustomObject]@{
@@ -35,14 +35,14 @@ Describe "Remove-Secret" {
         } -ModuleName $ExtensionModule.Name
         Mock Write-Error -MockWith {} -ModuleName $ExtensionModule.Name
 
-        Remove-Secret -name 'admin'
+        Remove-Secret -Name 'admin'
         Should -Invoke -CommandName Write-Error -ModuleName $ExtensionModule.Name
     }
 
-    It "removes a secret from the vault" {
+    It 'removes a secret from the vault' {
         Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-        Remove-Secret -name 'localAdmin01'
+        Remove-Secret -Name 'localAdmin01'
         Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name
     }
 }

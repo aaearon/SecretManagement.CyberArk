@@ -12,20 +12,18 @@ function Get-Secret {
 
     if ($PASAccount) {
         $Account = Get-PASAccount -id $PASAccount.Id
-    }
-    else {
+    } else {
         $GetPASAccountParameters = @{
             search = $Name
         }
-        if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add("safeName", $AdditionalParameters.safeName) }
+        if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add('safeName', $AdditionalParameters.safeName) }
 
         $results = Get-PASAccount @GetPASAccountParameters
 
         if ($results.Count -gt 1) {
             Write-Warning "Multiple matches found with name $Name. Returning the first match."
             $Account = $results[0]
-        }
-        else {
+        } else {
             $Account = $results
         }
     }
@@ -33,20 +31,19 @@ function Get-Secret {
     $GetPASAccountPasswordParameters = @{
         AccountId = $Account.Id
     }
-    if ($AdditionalParameters.Reason) { $GetPASAccountPasswordParameters.Add("Reason", $AdditionalParameters.Reason) }
-    if ($AdditionalParameters.TicketingSystem) { $GetPASAccountPasswordParameters.Add("TicketingSystem", $AdditionalParameters.TicketingSystem) }
-    if ($AdditionalParameters.TicketId) { $GetPASAccountPasswordParameters.Add("TicketId", $AdditionalParameters.TicketId) }
-    if ($AdditionalParameters.Version) { $GetPASAccountPasswordParameters.Add("Version", $AdditionalParameters.Version) }
-    if ($AdditionalParameters.ActionType) { $GetPASAccountPasswordParameters.Add("ActionType", $AdditionalParameters.ActionType) }
-    if ($AdditionalParameters.isUse) { $GetPASAccountPasswordParameters.Add("isUse", $AdditionalParameters.isUse) }
-    if ($AdditionalParameters.Machine) { $GetPASAccountPasswordParameters.Add("Machine", $AdditionalParameters.Machine) }
+    if ($AdditionalParameters.Reason) { $GetPASAccountPasswordParameters.Add('Reason', $AdditionalParameters.Reason) }
+    if ($AdditionalParameters.TicketingSystem) { $GetPASAccountPasswordParameters.Add('TicketingSystem', $AdditionalParameters.TicketingSystem) }
+    if ($AdditionalParameters.TicketId) { $GetPASAccountPasswordParameters.Add('TicketId', $AdditionalParameters.TicketId) }
+    if ($AdditionalParameters.Version) { $GetPASAccountPasswordParameters.Add('Version', $AdditionalParameters.Version) }
+    if ($AdditionalParameters.ActionType) { $GetPASAccountPasswordParameters.Add('ActionType', $AdditionalParameters.ActionType) }
+    if ($AdditionalParameters.isUse) { $GetPASAccountPasswordParameters.Add('isUse', $AdditionalParameters.isUse) }
+    if ($AdditionalParameters.Machine) { $GetPASAccountPasswordParameters.Add('Machine', $AdditionalParameters.Machine) }
 
     try {
         $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
         $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
         return $Credential
-    }
-    catch {
+    } catch {
         return $null
     }
 }
@@ -95,8 +92,7 @@ function Remove-Secret {
 
     if ($results.Count -gt 1) {
         Write-Error "Multiple matches found with name $Name. Not deleting anything."
-    }
-    else {
+    } else {
         $results | Remove-PASAccount
     }
 }
@@ -115,12 +111,12 @@ function Set-Secret {
     Test-PASSession
 
     $AddPASAccountParameters = @{}
-    if ($Name) { $AddPASAccountParameters.Add("name", $Name) }
-    if ($AdditionalParameters.userName) { $AddPASAccountParameters.Add("userName", $AdditionalParameters.userName) }
-    if ($AdditionalParameters.address) { $AddPASAccountParameters.Add("address", $AdditionalParameters.address) }
-    if ($Secret) { $AddPASAccountParameters.Add("secret", $Secret) }
+    if ($Name) { $AddPASAccountParameters.Add('name', $Name) }
+    if ($AdditionalParameters.userName) { $AddPASAccountParameters.Add('userName', $AdditionalParameters.userName) }
+    if ($AdditionalParameters.address) { $AddPASAccountParameters.Add('address', $AdditionalParameters.address) }
+    if ($Secret) { $AddPASAccountParameters.Add('secret', $Secret) }
 
-    Add-PASAccount @AddPASAccountParameters -safeName $safeName -platformId $platformId
+    Add-PASAccount @AddPASAccountParameters -SafeName $safeName -platformID $platformId
 }
 
 function Test-SecretVault {
@@ -139,9 +135,8 @@ function Test-SecretVault {
 function Test-PASSession {
     try {
         $null = Get-PASSession
-    }
-    catch {
-        throw "Failed to get PASSession. Run New-PASSession again."
+    } catch {
+        throw 'Failed to get PASSession. Run New-PASSession again.'
     }
 
 }

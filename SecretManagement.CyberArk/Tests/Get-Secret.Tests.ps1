@@ -26,9 +26,9 @@ AfterAll {
     Remove-Module $ExtensionModule -Force
 }
 
-Describe "Get-Secret" {
+Describe 'Get-Secret' {
     It 'should return a <PSType> for <SecretName>' {
-        $Secret = Get-Secret -name $SecretName
+        $Secret = Get-Secret -Name $SecretName
         $Secret | Should -Not -BeNullOrEmpty
         $Secret | Should -BeOfType $PSType
     } -TestCases (
@@ -52,7 +52,7 @@ Describe "Get-Secret" {
         } -ModuleName $ExtensionModule.Name
         Mock Write-Warning -MockWith {} -ModuleName $ExtensionModule.Name
 
-        Get-Secret -name 'admin'
+        Get-Secret -Name 'admin'
         Should -Invoke -CommandName Write-Warning -ModuleName $ExtensionModule.Name
     }
 

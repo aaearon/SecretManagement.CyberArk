@@ -8,15 +8,15 @@
 AfterAll {
     Remove-Module $ExtensionModule -Force
 }
-Describe "Set-Secret" {
-    It "calls Add-PASAccount" {
+Describe 'Set-Secret' {
+    It 'calls Add-PASAccount' {
         Mock Add-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-        Set-Secret -name 'test' -platformId 'Test' -safeName 'TestSafe' -secret ('test' | ConvertTo-SecureString -AsPlainText -Force)
+        Set-Secret -Name 'test' -platformId 'Test' -safeName 'TestSafe' -Secret ('test' | ConvertTo-SecureString -AsPlainText -Force)
         Should -Invoke -CommandName Add-PASAccount -ModuleName $ExtensionModule.Name
     }
 
-    It "should have a <Name> parameter" {
+    It 'should have a <Name> parameter' {
         $AllParameters = (Get-Command -Module $ExtensionModule.Name -Name 'Set-Secret').Parameters.Keys
         $Name | Should -BeIn $AllParameters
     } -TestCases @(
