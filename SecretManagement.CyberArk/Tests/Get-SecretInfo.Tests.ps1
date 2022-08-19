@@ -19,13 +19,24 @@ AfterAll {
     Remove-Module $ExtensionModule -Force
 }
 Describe 'Get-SecretInfo' {
-    It 'returns information on a secret' {
-        $SecretInfo = Get-SecretInfo -Filter 'localAdmin01'
-        $SecretInfo | Should -Not -BeNullOrEmpty
-        $SecretInfo | Should -BeOfType [Microsoft.PowerShell.SecretManagement.SecretInformation]
-        $SecretInfo.Name | Should -Be 'localAdmin01'
-        $SecretInfo.Metadata.userName | Should -Be 'localAdmin01'
-        $SecretInfo.Metadata.Id | Should -Be '1'
-        $SecretInfo.Metadata.safeName | Should -Be 'LocalAdministrators'
+    Context 'when connection type is REST' {
+        BeforeAll {
+            $VaultName = 'CyberArk.Test'
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
+        }
+
+        It 'returns information on a secret' {
+            $SecretInfo = Get-SecretInfo -Filter 'localAdmin01' -VaultName $VaultName
+            $SecretInfo | Should -Not -BeNullOrEmpty
+            $SecretInfo | Should -BeOfType [Microsoft.PowerShell.SecretManagement.SecretInformation]
+            $SecretInfo.Name | Should -Be 'localAdmin01'
+            $SecretInfo.Metadata.userName | Should -Be 'localAdmin01'
+            $SecretInfo.Metadata.Id | Should -Be '1'
+            $SecretInfo.Metadata.safeName | Should -Be 'LocalAdministrators'
+        }
+
+        AfterAll {
+            Unregister-SecretVault -Name $VaultName
+        }
     }
 }

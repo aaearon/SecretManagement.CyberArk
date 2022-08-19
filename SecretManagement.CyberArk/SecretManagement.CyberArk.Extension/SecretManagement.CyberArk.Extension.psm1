@@ -8,44 +8,62 @@ function Get-Secret {
         [object] $PASAccount
     )
 
-    Test-PASSession
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
-    if ($PASAccount) {
-        $Account = Get-PASAccount -id $PASAccount.Id
-    } else {
-        $GetPASAccountParameters = @{
-            search = $Name
+    switch ($VaultParameters.ConnectionType) {
+        'CP' {
+
         }
-        if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add('safeName', $AdditionalParameters.safeName) }
+        'CCP' {
 
-        $results = Get-PASAccount @GetPASAccountParameters
+        }
 
-        if ($results.Count -gt 1) {
-            Write-Warning "Multiple matches found with name $Name. Returning the first match."
-            $Account = $results[0]
-        } else {
-            $Account = $results
+        'REST' {
+            Test-PASSession
+
+            if ($PASAccount) {
+                $Account = Get-PASAccount -id $PASAccount.Id
+            } else {
+                $GetPASAccountParameters = @{
+                    search = $Name
+                }
+                if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add('safeName', $AdditionalParameters.safeName) }
+
+                $results = Get-PASAccount @GetPASAccountParameters
+
+                if ($results.Count -gt 1) {
+                    Write-Warning "Multiple matches found with name $Name. Returning the first match."
+                    $Account = $results[0]
+                } else {
+                    $Account = $results
+                }
+            }
+
+            $GetPASAccountPasswordParameters = @{
+                AccountId = $Account.Id
+            }
+            if ($AdditionalParameters.Reason) { $GetPASAccountPasswordParameters.Add('Reason', $AdditionalParameters.Reason) }
+            if ($AdditionalParameters.TicketingSystem) { $GetPASAccountPasswordParameters.Add('TicketingSystem', $AdditionalParameters.TicketingSystem) }
+            if ($AdditionalParameters.TicketId) { $GetPASAccountPasswordParameters.Add('TicketId', $AdditionalParameters.TicketId) }
+            if ($AdditionalParameters.Version) { $GetPASAccountPasswordParameters.Add('Version', $AdditionalParameters.Version) }
+            if ($AdditionalParameters.ActionType) { $GetPASAccountPasswordParameters.Add('ActionType', $AdditionalParameters.ActionType) }
+            if ($AdditionalParameters.isUse) { $GetPASAccountPasswordParameters.Add('isUse', $AdditionalParameters.isUse) }
+            if ($AdditionalParameters.Machine) { $GetPASAccountPasswordParameters.Add('Machine', $AdditionalParameters.Machine) }
+
+            try {
+                $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
+                $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
+            } catch {
+                $Credential = $null
+            }
+        }
+
+        default {
+            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
         }
     }
 
-    $GetPASAccountPasswordParameters = @{
-        AccountId = $Account.Id
-    }
-    if ($AdditionalParameters.Reason) { $GetPASAccountPasswordParameters.Add('Reason', $AdditionalParameters.Reason) }
-    if ($AdditionalParameters.TicketingSystem) { $GetPASAccountPasswordParameters.Add('TicketingSystem', $AdditionalParameters.TicketingSystem) }
-    if ($AdditionalParameters.TicketId) { $GetPASAccountPasswordParameters.Add('TicketId', $AdditionalParameters.TicketId) }
-    if ($AdditionalParameters.Version) { $GetPASAccountPasswordParameters.Add('Version', $AdditionalParameters.Version) }
-    if ($AdditionalParameters.ActionType) { $GetPASAccountPasswordParameters.Add('ActionType', $AdditionalParameters.ActionType) }
-    if ($AdditionalParameters.isUse) { $GetPASAccountPasswordParameters.Add('isUse', $AdditionalParameters.isUse) }
-    if ($AdditionalParameters.Machine) { $GetPASAccountPasswordParameters.Add('Machine', $AdditionalParameters.Machine) }
-
-    try {
-        $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
-        $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
-        return $Credential
-    } catch {
-        return $null
-    }
+    return $Credential
 }
 
 function Get-SecretInfo {
@@ -56,9 +74,20 @@ function Get-SecretInfo {
         [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
-    $results = Get-PASAccount -search "$Filter"
+    switch ($VaultParameters.ConnectionType) {
+        'CP' { }
+        'CCP' { }
+        'REST' {
+            Test-PASSession
+
+            $results = Get-PASAccount -search "$Filter"
+        }
+        Default {
+            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+        }
+    }
 
     $Secrets = New-Object System.Collections.Generic.List[System.Object]
 
@@ -86,14 +115,29 @@ function Remove-Secret {
         [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
-    $results = Get-PASAccount -search "$Name"
+    switch ($VaultParameters.ConnectionType) {
+        'CP' {
+            throw 'Remove-Secret is not supported for Credential Provider'
+        }
+        'CCP' {
+            throw 'Remove-Secret is not supported for Central Credential Provider'
+        }
+        'REST' {
+            Test-PASSession
 
-    if ($results.Count -gt 1) {
-        Write-Error "Multiple matches found with name $Name. Not deleting anything."
-    } else {
-        $results | Remove-PASAccount
+            $results = Get-PASAccount -search "$Name"
+
+            if ($results.Count -gt 1) {
+                Write-Error "Multiple matches found with name $Name. Not deleting anything."
+            } else {
+                $results | Remove-PASAccount
+            }
+        }
+        Default {
+            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+        }
     }
 }
 
@@ -103,20 +147,40 @@ function Set-Secret {
         [string] $Name,
         [object] $Secret,
         [string] $VaultName,
-        [hashtable] $AdditionalParameters,
-        [Parameter(Mandatory = $true)][string] $platformId,
-        [Parameter(Mandatory = $true)][string] $safeName
+        [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
-    $AddPASAccountParameters = @{}
-    if ($Name) { $AddPASAccountParameters.Add('name', $Name) }
-    if ($AdditionalParameters.userName) { $AddPASAccountParameters.Add('userName', $AdditionalParameters.userName) }
-    if ($AdditionalParameters.address) { $AddPASAccountParameters.Add('address', $AdditionalParameters.address) }
-    if ($Secret) { $AddPASAccountParameters.Add('secret', $Secret) }
+    switch ($VaultParameters.ConnectionType) {
+        'CP' {
+            throw 'Set-Secret is not supported for Credential Provider'
+        }
+        'CCP' {
+            throw 'Set-Secret is not supported for Central Credential Provider'
+        }
+        'REST' {
+            if ($null -eq $AdditionalParameters.SafeName -or $null -eq $AdditionalParameters.PlatformId) {
+                throw 'SafeName and PlatformId are required keys in $AdditionalParameters'
+            }
 
-    Add-PASAccount @AddPASAccountParameters -SafeName $safeName -platformID $platformId
+            Test-PASSession
+
+            $AddPASAccountParameters = @{
+                SafeName   = $AdditionalParameters.SafeName
+                PlatformId = $AdditionalParameters.PlatformId
+            }
+            if ($Name) { $AddPASAccountParameters.Add('name', $Name) }
+            if ($AdditionalParameters.userName) { $AddPASAccountParameters.Add('userName', $AdditionalParameters.userName) }
+            if ($AdditionalParameters.address) { $AddPASAccountParameters.Add('address', $AdditionalParameters.address) }
+            if ($Secret) { $AddPASAccountParameters.Add('secret', $Secret) }
+
+            Add-PASAccount @AddPASAccountParameters
+        }
+        Default {
+            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+        }
+    }
 }
 
 function Test-SecretVault {

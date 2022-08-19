@@ -20,15 +20,20 @@ BeforeAll {
             Id       = '1'
         }
     } -ModuleName $ExtensionModule.Name
+
+
+    $VaultName = 'CyberArk.Test'
+    Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST'}
 }
 
 AfterAll {
+    Unregister-SecretVault -Name $VaultName
     Remove-Module $ExtensionModule -Force
 }
 
 Describe 'Get-Secret' {
     It 'should return a <PSType> for <SecretName>' {
-        $Secret = Get-Secret -Name $SecretName
+        $Secret = Get-Secret -Name $SecretName -VaultName $VaultName
         $Secret | Should -Not -BeNullOrEmpty
         $Secret | Should -BeOfType $PSType
     } -TestCases (
@@ -52,7 +57,7 @@ Describe 'Get-Secret' {
         } -ModuleName $ExtensionModule.Name
         Mock Write-Warning -MockWith {} -ModuleName $ExtensionModule.Name
 
-        Get-Secret -Name 'admin'
+        Get-Secret -Name 'admin' -VaultName $VaultName
         Should -Invoke -CommandName Write-Warning -ModuleName $ExtensionModule.Name
     }
 

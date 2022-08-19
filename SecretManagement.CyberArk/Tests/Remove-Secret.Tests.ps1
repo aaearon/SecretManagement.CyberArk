@@ -17,32 +17,44 @@ AfterAll {
     Remove-Module $ExtensionModule -Force
 }
 Describe 'Remove-Secret' {
-    It 'writes an error when more than one account is found' {
-        Mock Get-PASAccount -MockWith {
-            $Results = @(
-                [PSCustomObject]@{
-                    name     = 'localAdmin01'
-                    userName = 'localAdmin01'
-                    Id       = '1'
-                },
-                [PSCustomObject]@{
-                    name     = 'localAdmin02'
-                    userName = 'localAdmin02'
-                    Id       = '2'
-                }
-            )
-            return $Results
-        } -ModuleName $ExtensionModule.Name
-        Mock Write-Error -MockWith {} -ModuleName $ExtensionModule.Name
+    Context 'when connection type is REST' {
+        BeforeAll {
+            $VaultName = 'CyberArk.Test'
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
+        }
 
-        Remove-Secret -Name 'admin'
-        Should -Invoke -CommandName Write-Error -ModuleName $ExtensionModule.Name
-    }
+        It 'writes an error when more than one account is found' {
+            Mock Get-PASAccount -MockWith {
+                $Results = @(
+                    [PSCustomObject]@{
+                        name     = 'localAdmin01'
+                        userName = 'localAdmin01'
+                        Id       = '1'
+                    },
+                    [PSCustomObject]@{
+                        name     = 'localAdmin02'
+                        userName = 'localAdmin02'
+                        Id       = '2'
+                    }
+                )
+                return $Results
+            } -ModuleName $ExtensionModule.Name
+            Mock Write-Error -MockWith {} -ModuleName $ExtensionModule.Name
 
-    It 'removes a secret from the vault' {
-        Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
+            Remove-Secret -Name 'admin' -VaultName $VaultName
+            Should -Invoke -CommandName Write-Error -ModuleName $ExtensionModule.Name
+        }
 
-        Remove-Secret -Name 'localAdmin01'
-        Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name
+        It 'removes a secret from the vault' {
+            Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
+
+            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName
+            Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name
+        }
+
+
+        AfterAll {
+            Unregister-SecretVault -Name $VaultName
+        }
     }
 }
