@@ -1,0 +1,21 @@
+﻿
+name: Publish Module to PowerShell Gallery
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Publish Module to PowerShell Gallery
+        uses: pcgeek86/publish-powershell-module-action@v20
+        id: publish-module
+        with:
+          NuGetApiKey: ${{ secrets.PS_GALLERY_KEY }}

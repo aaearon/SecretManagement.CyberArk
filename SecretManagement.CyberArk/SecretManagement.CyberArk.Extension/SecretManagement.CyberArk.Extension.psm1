@@ -5,49 +5,69 @@ function Get-Secret {
         [string] $VaultName,
         [hashtable] $AdditionalParameters,
         [Parameter(ValueFromPipeline = $true)]
-        [object] $PASAccount
+        [object] $PASAccount,
+        [string] $SafeName
     )
 
-    Test-PASSession
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
-    if ($PASAccount) {
-        $Account = Get-PASAccount -id $PASAccount.Id
-    }
-    else {
-        $GetPASAccountParameters = @{}
-        $GetPASAccountParameters.Add("search", $Name)
-        if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add("safeName", $AdditionalParameters.safeName) }
-
-        $results = Get-PASAccount @GetPASAccountParameters
-
-        if ($results.Count -gt 1) {
-            Write-Warning -Message "Multiple matches found with name $Name. Returning the first match."
-            $Account = $results[0]
+    switch ($VaultParameters.ConnectionType) {
+        'CredentialProvider' {
+            if ($null -eq $SafeName) { throw 'SafeName is required for the Credential Provider type' }
+            $Credential = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
         }
-        else {
-            $Account = $results
+        'CentralCredentialProvider' {
+            $Credential = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
+        }
+
+        'REST' {
+            Test-PASSession
+
+            if ($PASAccount) {
+                $Account = Get-PASAccount -id $PASAccount.Id
+            } else {
+                $GetPASAccountParameters = @{
+                    search = $Name
+                }
+                if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add('safeName', $AdditionalParameters.safeName) }
+
+                $results = Get-PASAccount @GetPASAccountParameters
+
+                if ($results.Count -gt 1) {
+                    Write-Warning "Multiple matches found with name $Name. Returning the first match."
+                    $Account = $results[0]
+                } else {
+                    $Account = $results
+                }
+            }
+
+            $GetPASAccountPasswordParameters = @{
+                AccountId = $Account.Id
+            }
+            if ($AdditionalParameters.Reason) { $GetPASAccountPasswordParameters.Add('Reason', $AdditionalParameters.Reason) }
+            if ($AdditionalParameters.TicketingSystem) { $GetPASAccountPasswordParameters.Add('TicketingSystem', $AdditionalParameters.TicketingSystem) }
+            if ($AdditionalParameters.TicketId) { $GetPASAccountPasswordParameters.Add('TicketId', $AdditionalParameters.TicketId) }
+            if ($AdditionalParameters.Version) { $GetPASAccountPasswordParameters.Add('Version', $AdditionalParameters.Version) }
+            if ($AdditionalParameters.ActionType) { $GetPASAccountPasswordParameters.Add('ActionType', $AdditionalParameters.ActionType) }
+            if ($AdditionalParameters.isUse) { $GetPASAccountPasswordParameters.Add('isUse', $AdditionalParameters.isUse) }
+            if ($AdditionalParameters.Machine) { $GetPASAccountPasswordParameters.Add('Machine', $AdditionalParameters.Machine) }
+
+            try {
+                $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
+                $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
+            } catch {
+                $Credential = $null
+            }
+        }
+
+        default {
+            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
         }
     }
 
-    # https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_splatting?view=powershell-7.1
-    $GetPASAccountPasswordParameters = @{}
-    $GetPASAccountPasswordParameters.Add("AccountId", $Account.Id)
-    if ($AdditionalParameters.Reason) { $GetPASAccountPasswordParameters.Add("Reason", $AdditionalParameters.Reason) }
-    if ($AdditionalParameters.TicketingSystem) { $GetPASAccountPasswordParameters.Add("TicketingSystem", $AdditionalParameters.TicketingSystem) }
-    if ($AdditionalParameters.TicketId) { $GetPASAccountPasswordParameters.Add("TicketId", $AdditionalParameters.TicketId) }
-    if ($AdditionalParameters.Version) { $GetPASAccountPasswordParameters.Add("Version", $AdditionalParameters.Version) }
-    if ($AdditionalParameters.ActionType) { $GetPASAccountPasswordParameters.Add("ActionType", $AdditionalParameters.ActionType) }
-    if ($AdditionalParameters.isUse) { $GetPASAccountPasswordParameters.Add("isUse", $AdditionalParameters.isUse) }
-    if ($AdditionalParameters.Machine) { $GetPASAccountPasswordParameters.Add("Machine", $AdditionalParameters.Machine) }
-
-    try {
-        $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
-        $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
-        return $Credential
-    }
-    catch {
-        return $null
-    }
+    return $Credential
 }
 
 function Get-SecretInfo {
@@ -58,9 +78,26 @@ function Get-SecretInfo {
         [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
-    $results = Get-PASAccount -search "$Filter"
+    switch ($VaultParameters.ConnectionType) {
+        'CredentialProvider' {
+            $results = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $results = $results | Select-Object -Property * -ExcludeProperty Password
+        }
+        'CentralCredentialProvider' {
+            $results = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $results = $results | Select-Object -Property * -ExcludeProperty Content
+        }
+        'REST' {
+            Test-PASSession
+
+            $results = Get-PASAccount -search "$Filter"
+        }
+        Default {
+            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+        }
+    }
 
     $Secrets = New-Object System.Collections.Generic.List[System.Object]
 
@@ -88,15 +125,29 @@ function Remove-Secret {
         [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
-    $results = Get-PASAccount -search "$Name"
+    switch ($VaultParameters.ConnectionType) {
+        'CredentialProvider' {
+            throw 'Remove-Secret is not supported for Credential Provider'
+        }
+        'CentralCredentialProvider' {
+            throw 'Remove-Secret is not supported for Central Credential Provider'
+        }
+        'REST' {
+            Test-PASSession
 
-    if ($results.Count -gt 1) {
-        Write-Error -Message "Multiple matches found with name $Name. Not deleting anything."
-    }
-    else {
-        $results | Remove-PASAccount
+            $results = Get-PASAccount -search "$Name"
+
+            if ($results.Count -gt 1) {
+                Write-Error "Multiple matches found with name $Name. Not deleting anything."
+            } else {
+                $results | Remove-PASAccount
+            }
+        }
+        Default {
+            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+        }
     }
 }
 
@@ -106,20 +157,40 @@ function Set-Secret {
         [string] $Name,
         [object] $Secret,
         [string] $VaultName,
-        [hashtable] $AdditionalParameters,
-        [Parameter(Mandatory = $true)][string] $platformId,
-        [Parameter(Mandatory = $true)][string] $safeName
+        [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
-    $AddPASAccountParameters = @{}
-    if ($Name) { $AddPASAccountParameters.Add("name", $Name) }
-    if ($AdditionalParameters.userName) { $AddPASAccountParameters.Add("userName", $AdditionalParameters.userName) }
-    if ($AdditionalParameters.address) { $AddPASAccountParameters.Add("address", $AdditionalParameters.address) }
-    if ($Secret) { $AddPASAccountParameters.Add("secret", $Secret) }
+    switch ($VaultParameters.ConnectionType) {
+        'CredentialProvider' {
+            throw 'Set-Secret is not supported for Credential Provider'
+        }
+        'CentralCredentialProvider' {
+            throw 'Set-Secret is not supported for Central Credential Provider'
+        }
+        'REST' {
+            if ($null -eq $AdditionalParameters.SafeName -or $null -eq $AdditionalParameters.PlatformId) {
+                throw 'SafeName and PlatformId are required keys in $AdditionalParameters'
+            }
 
-    Add-PASAccount @AddPASAccountParameters -safeName $safeName -platformId $platformId
+            Test-PASSession
+
+            $AddPASAccountParameters = @{
+                SafeName   = $AdditionalParameters.SafeName
+                PlatformId = $AdditionalParameters.PlatformId
+            }
+            if ($Name) { $AddPASAccountParameters.Add('name', $Name) }
+            if ($AdditionalParameters.userName) { $AddPASAccountParameters.Add('userName', $AdditionalParameters.userName) }
+            if ($AdditionalParameters.address) { $AddPASAccountParameters.Add('address', $AdditionalParameters.address) }
+            if ($Secret) { $AddPASAccountParameters.Add('secret', $Secret) }
+
+            Add-PASAccount @AddPASAccountParameters
+        }
+        Default {
+            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+        }
+    }
 }
 
 function Test-SecretVault {
@@ -138,9 +209,58 @@ function Test-SecretVault {
 function Test-PASSession {
     try {
         $null = Get-PASSession
-    }
-    catch {
-        throw "Failed to get PASSession. Run New-PASSession again."
+    } catch {
+        throw 'Failed to get PASSession. Run New-PASSession again.'
     }
 
+}
+
+function Invoke-GetCCPCredential {
+    [CmdletBinding()]
+    param (
+        [string] $Name,
+        [string] $VaultName,
+        [hashtable] $AdditionalParameters
+    )
+
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
+
+    $GetCCPCredentialParameters = @{
+        AppID  = $VaultParameters.AppID
+        URL    = $VaultParameters.URL
+        Object = $Name
+    }
+    if ($VaultParameters.SkipCertificateCheck) { $GetCCPCredentialParameters.Add('SkipCertificateCheck', $VaultParameters.SkipCertificateCheck) }
+    if ($VaultParameters.UseDefaultCredentials) { $GetCCPCredentialParameters.Add('UseDefaultCredentials', $VaultParameters.UseDefaultCredentials) }
+    if ($VaultParameters.Credential) { $GetCCPCredentialParameters.Add('Credential', $VaultParameters.Credential) }
+    if ($VaultParameters.CertificateThumbPrint) { $GetCCPCredentialParameters.Add('CertificateThumbPrint', $VaultParameters.CertificateThumbPrint) }
+    if ($VaultParameters.Certificate) { $GetCCPCredentialParameters.Add('Certificate', $VaultParameters.Certificatel) }
+
+
+    $Credential = Get-CCPCredential @GetCCPCredentialParameters
+    return $Credential
+}
+
+function Invoke-GetAIMCredential {
+    [CmdletBinding()]
+    param (
+        [string] $Name,
+        [string] $SafeName,
+        [string] $VaultName,
+        [hashtable] $AdditionalParameters
+    )
+
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
+
+    if ($VaultParameters.ClientPath) { Set-AIMConfiguration -ClientPath $VaultParameters.ClientPath }
+
+    $GetAIMCredentialParameters = @{
+        AppID    = $VaultParameters.AppID
+        UserName = $Name
+    }
+    if ($SafeName) { $GetAIMCredentialParameters.Add('SafeName', $SafeName) }
+    if ($AdditionalParameters.RequiredProps) { $GetAIMCredentialParameters.Add('RequiredProps', $AdditionalParameters.RequiredProps) }
+
+    $Credential = Get-AIMCredential @GetAIMCredentialParameters
+    return $Credential
 }
