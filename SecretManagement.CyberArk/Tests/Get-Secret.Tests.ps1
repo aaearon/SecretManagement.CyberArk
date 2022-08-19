@@ -13,26 +13,26 @@ AfterAll {
 
 Describe 'Get-Secret' {
     Context 'when connection type is REST' {
-        Mock Get-PASAccountPassword -MockWith {
-            $Result = [PSCustomObject]@{
-                Password = 'fake'
-                userName = 'localAdmin01'
-            }
-            $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this | Select-Object -ExpandProperty Password | ConvertTo-SecureString -AsPlainText -Force }
-            return $Result
-        } -ModuleName $ExtensionModule.Name
-        Mock Get-PASAccount -MockWith {
-            return [PSCustomObject]@{
-                name     = 'localAdmin01'
-                userName = 'localAdmin01'
-                Id       = '1'
-            }
-        } -ModuleName $ExtensionModule.Name
-
         BeforeAll {
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
         }
         It 'should return a <PSType> for <SecretName>' {
+            Mock Get-PASAccountPassword -MockWith {
+                $Result = [PSCustomObject]@{
+                    Password = 'fake'
+                    userName = 'localAdmin01'
+                }
+                $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this | Select-Object -ExpandProperty Password | ConvertTo-SecureString -AsPlainText -Force }
+                return $Result
+            } -ModuleName $ExtensionModule.Name
+            Mock Get-PASAccount -MockWith {
+                return [PSCustomObject]@{
+                    name     = 'localAdmin01'
+                    userName = 'localAdmin01'
+                    Id       = '1'
+                }
+            } -ModuleName $ExtensionModule.Name
+
             $Secret = Get-Secret -Name $SecretName -VaultName $VaultName
             $Secret | Should -Not -BeNullOrEmpty
             $Secret | Should -BeOfType $PSType
