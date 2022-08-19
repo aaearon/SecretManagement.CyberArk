@@ -53,6 +53,7 @@ PowerShellVersion = '5.1'
 # Modules that must be imported into the global environment prior to importing this module
 RequiredModules = @(
     'psPAS',
+    'CredentialRetriever',
     @{
         ModuleName = 'Microsoft.Powershell.SecretManagement'
         ModuleVersion = '1.0.0'
