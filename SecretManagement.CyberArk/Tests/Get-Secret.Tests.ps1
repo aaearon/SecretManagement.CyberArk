@@ -73,13 +73,29 @@ Describe 'Get-Secret' {
 
 
         BeforeAll {
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'}
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com' }
         }
 
         It 'invokes Get-CCPCredential' {
             Mock Get-CCPCredential -MockWith {} -ModuleName $ExtensionModule.Name
             Get-Secret -Name 'admin' -VaultName $VaultName
             Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name
+        }
+
+        AfterAll {
+            Unregister-SecretVault -Name $VaultName
+        }
+    }
+
+    Context 'when connection type is Credential Provder' {
+        BeforeAll {
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider'; AppID = 'banana' }
+        }
+
+        It 'invokes Get-AIMCredential' {
+            Mock Get-AIMCredential -MockWith {} -ModuleName $ExtensionModule.Name
+            Get-Secret -Name 'windowsAdmin01' -SafeName 'Windows' -VaultName $VaultName
+            Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name
         }
 
         AfterAll {

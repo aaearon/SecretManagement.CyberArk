@@ -5,14 +5,17 @@ function Get-Secret {
         [string] $VaultName,
         [hashtable] $AdditionalParameters,
         [Parameter(ValueFromPipeline = $true)]
-        [object] $PASAccount
+        [object] $PASAccount,
+        [string] $SafeName
     )
 
     $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
-
+            if ($null -eq $SafeName) { throw 'SafeName is required for the Credential Provider type' }
+            $Credential = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
         }
         'CentralCredentialProvider' {
             $Credential = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
@@ -78,7 +81,10 @@ function Get-SecretInfo {
     $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
     switch ($VaultParameters.ConnectionType) {
-        'CredentialProvider' { }
+        'CredentialProvider' {
+            $results = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $results = $results | Select-Object -Property * -ExcludeProperty Password
+        }
         'CentralCredentialProvider' {
             $results = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
             $results = $results | Select-Object -Property * -ExcludeProperty Content
@@ -220,8 +226,8 @@ function Invoke-GetCCPCredential {
     $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
     $GetCCPCredentialParameters = @{
-        AppID = $VaultParameters.AppID
-        URL = $VaultParameters.URL
+        AppID  = $VaultParameters.AppID
+        URL    = $VaultParameters.URL
         Object = $Name
     }
     if ($VaultParameters.SkipCertificateCheck) { $GetCCPCredentialParameters.Add('SkipCertificateCheck', $VaultParameters.SkipCertificateCheck) }
@@ -232,5 +238,29 @@ function Invoke-GetCCPCredential {
 
 
     $Credential = Get-CCPCredential @GetCCPCredentialParameters
+    return $Credential
+}
+
+function Invoke-GetAIMCredential {
+    [CmdletBinding()]
+    param (
+        [string] $Name,
+        [string] $SafeName,
+        [string] $VaultName,
+        [hashtable] $AdditionalParameters
+    )
+
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
+
+    if ($VaultParameters.ClientPath) { Set-AIMConfiguration -ClientPath $VaultParameters.ClientPath }
+
+    $GetAIMCredentialParameters = @{
+        AppID    = $VaultParameters.AppID
+        UserName = $Name
+    }
+    if ($SafeName) { $GetAIMCredentialParameters.Add('SafeName', $SafeName) }
+    if ($AdditionalParameters.RequiredProps) { $GetAIMCredentialParameters.Add('RequiredProps', $AdditionalParameters.RequiredProps) }
+
+    $Credential = Get-AIMCredential @GetAIMCredentialParameters
     return $Credential
 }
