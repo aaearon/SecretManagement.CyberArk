@@ -4,6 +4,7 @@
 
     Import-Module Microsoft.PowerShell.SecretManagement
     $ExtensionModule = Import-Module "$PSScriptRoot/../SecretManagement.CyberArk.Extension/*.psd1" -Force -PassThru
+    $VaultName = 'CyberArk.Test'
 
     Mock Get-PASAccount -MockWith {
         return [PSCustomObject]@{
@@ -21,7 +22,7 @@ AfterAll {
 Describe 'Get-SecretInfo' {
     Context 'when connection type is REST' {
         BeforeAll {
-            $VaultName = 'CyberArk.Test'
+
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
         }
 
@@ -33,6 +34,21 @@ Describe 'Get-SecretInfo' {
             $SecretInfo.Metadata.userName | Should -Be 'localAdmin01'
             $SecretInfo.Metadata.Id | Should -Be '1'
             $SecretInfo.Metadata.safeName | Should -Be 'LocalAdministrators'
+        }
+
+        AfterAll {
+            Unregister-SecretVault -Name $VaultName
+        }
+    }
+    Context 'when connection type is Central Credential Provder' {
+        BeforeAll {
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'}
+        }
+
+        It 'invokes Get-CCPCredential' {
+            Mock Get-CCPCredential -MockWith {} -ModuleName $ExtensionModule.Name
+            Get-SecretInfo -Filter 'admin' -VaultName $VaultName
+            Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name
         }
 
         AfterAll {

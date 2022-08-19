@@ -15,7 +15,8 @@ function Get-Secret {
 
         }
         'CentralCredentialProvider' {
-
+            $Credential = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
         }
 
         'REST' {
@@ -78,7 +79,10 @@ function Get-SecretInfo {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' { }
-        'CentralCredentialProvider' { }
+        'CentralCredentialProvider' {
+            $results = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $results = $results | Select-Object -Property * -ExcludeProperty Content
+        }
         'REST' {
             Test-PASSession
 
@@ -203,4 +207,30 @@ function Test-PASSession {
         throw 'Failed to get PASSession. Run New-PASSession again.'
     }
 
+}
+
+function Invoke-GetCCPCredential {
+    [CmdletBinding()]
+    param (
+        [string] $Name,
+        [string] $VaultName,
+        [hashtable] $AdditionalParameters
+    )
+
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
+
+    $GetCCPCredentialParameters = @{
+        AppID = $VaultParameters.AppID
+        URL = $VaultParameters.URL
+        Object = $Name
+    }
+    if ($VaultParameters.SkipCertificateCheck) { $GetCCPCredentialParameters.Add('SkipCertificateCheck', $VaultParameters.SkipCertificateCheck) }
+    if ($VaultParameters.UseDefaultCredentials) { $GetCCPCredentialParameters.Add('UseDefaultCredentials', $VaultParameters.UseDefaultCredentials) }
+    if ($VaultParameters.Credential) { $GetCCPCredentialParameters.Add('Credential', $VaultParameters.Credential) }
+    if ($VaultParameters.CertificateThumbPrint) { $GetCCPCredentialParameters.Add('CertificateThumbPrint', $VaultParameters.CertificateThumbPrint) }
+    if ($VaultParameters.Certificate) { $GetCCPCredentialParameters.Add('Certificate', $VaultParameters.Certificatel) }
+
+
+    $Credential = Get-CCPCredential @GetCCPCredentialParameters
+    return $Credential
 }
