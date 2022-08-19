@@ -3,6 +3,7 @@
     Get-Module 'Microsoft.Powershell.SecretManagement' | Remove-Module -Force
 
     $ExtensionModule = Import-Module "$PSScriptRoot/../SecretManagement.CyberArk.Extension/*.psd1" -Force -PassThru
+    $VaultName = 'CyberArk.Test'
 
     Mock Get-PASAccount -MockWith {
         return [PSCustomObject]@{
@@ -19,7 +20,6 @@ AfterAll {
 Describe 'Remove-Secret' {
     Context 'when connection type is REST' {
         BeforeAll {
-            $VaultName = 'CyberArk.Test'
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
         }
 
@@ -52,8 +52,23 @@ Describe 'Remove-Secret' {
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name
         }
 
-
         AfterAll {
+            Unregister-SecretVault -Name $VaultName
+        }
+    }
+
+    Context 'when connection type is Credential Provider' {
+        It 'throws an error' {
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider' }
+            { Remove-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw 'Remove-Secret is not supported for Credential Provider'
+            Unregister-SecretVault -Name $VaultName
+        }
+    }
+
+    Context 'when connection type is Central Credential Provider' {
+        It 'throws an error' {
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider' }
+            { Remove-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw 'Remove-Secret is not supported for Central Credential Provider'
             Unregister-SecretVault -Name $VaultName
         }
     }

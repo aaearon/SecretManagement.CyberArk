@@ -11,10 +11,10 @@ function Get-Secret {
     $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
     switch ($VaultParameters.ConnectionType) {
-        'CP' {
+        'CredentialProvider' {
 
         }
-        'CCP' {
+        'CentralCredentialProvider' {
 
         }
 
@@ -77,8 +77,8 @@ function Get-SecretInfo {
     $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
     switch ($VaultParameters.ConnectionType) {
-        'CP' { }
-        'CCP' { }
+        'CredentialProvider' { }
+        'CentralCredentialProvider' { }
         'REST' {
             Test-PASSession
 
@@ -118,10 +118,10 @@ function Remove-Secret {
     $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
     switch ($VaultParameters.ConnectionType) {
-        'CP' {
+        'CredentialProvider' {
             throw 'Remove-Secret is not supported for Credential Provider'
         }
-        'CCP' {
+        'CentralCredentialProvider' {
             throw 'Remove-Secret is not supported for Central Credential Provider'
         }
         'REST' {
@@ -153,10 +153,10 @@ function Set-Secret {
     $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
 
     switch ($VaultParameters.ConnectionType) {
-        'CP' {
+        'CredentialProvider' {
             throw 'Set-Secret is not supported for Credential Provider'
         }
-        'CCP' {
+        'CentralCredentialProvider' {
             throw 'Set-Secret is not supported for Central Credential Provider'
         }
         'REST' {
