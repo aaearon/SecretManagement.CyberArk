@@ -3,7 +3,10 @@ on: [push, pull_request]
 jobs:
   pester-test:
     name: Run Pester tests
-    runs-on: [ubuntu-latest, windows-2019, windows-latest]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-2019, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
