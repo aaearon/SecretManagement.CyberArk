@@ -6,9 +6,9 @@ The [psPAS](https://github.com/pspete/psPAS) or [CredentialRetriever](https://gi
 
 ## Prerequisities
 
-* The [psPAS](https://github.com/pspete/psPAS) Powershell module
-* The [CredentialRetriever](https://github.com/pspete/CredentialRetriever) Powershell module
-* The [SecretManagement](https://github.com/powershell/secretmanagement) Powershell module
+- The [psPAS](https://github.com/pspete/psPAS) Powershell module
+- The [CredentialRetriever](https://github.com/pspete/CredentialRetriever) Powershell module
+- The [SecretManagement](https://github.com/powershell/secretmanagement) Powershell module
 
 ## Installation
 
@@ -33,7 +33,7 @@ $VaultParameters = @{
     ClientPath     = 'C:\Path\To\CLIPasswordSDK.exe'
 }
 
-Register-SecretVault -Name CyberArk -ModuleName SecretManagement.CyberArk @VaultParameters
+Register-SecretVault -Name CyberArk -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParameters
 ```
 
 ### Central Credential Provider
@@ -48,7 +48,7 @@ $VaultParameters = @{
     SkipCertificateCheck = $true
 }
 
-Register-SecretVault -Name CyberArk -ModuleName SecretManagement.CyberArk @VaultParameters
+Register-SecretVault -Name CyberArk -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParameters
 ```
 
 ### REST API
@@ -60,7 +60,7 @@ $VaultParameters = @{
     ConnectionType = 'REST'
 }
 
-Register-SecretVault -Name CyberArk -ModuleName SecretManagement.CyberArk @VaultParameters
+Register-SecretVault -Name CyberArk -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParameters
 ```
 
 ## Usage
