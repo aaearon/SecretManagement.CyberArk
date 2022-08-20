@@ -1,4 +1,4 @@
-name: Run Pester tests on Ubuntu
+name: Run Pester tests
 on: [push, pull_request]
 jobs:
   pester-test:
