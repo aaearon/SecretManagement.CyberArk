@@ -82,14 +82,17 @@ function Get-SecretInfo {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
+            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::SecureString
             $results = Invoke-GetAIMCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
             $results = $results | Select-Object -Property * -ExcludeProperty Password
         }
         'CentralCredentialProvider' {
+            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::SecureString
             $results = Invoke-GetCCPCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
             $results = $results | Select-Object -Property * -ExcludeProperty Content
         }
         'REST' {
+            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
             Test-PASSession
 
             $results = Get-PASAccount -search "$Filter"
@@ -107,7 +110,7 @@ function Get-SecretInfo {
 
         $SecretInfo = [Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
             "$($Account.name)", # Name of secret
-            [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential, # Secret data type [Microsoft.PowerShell.SecretManagement.SecretType]
+            $SecretDataType, # Secret data type [Microsoft.PowerShell.SecretManagement.SecretType]
             $VaultName, # Name of vault
             $Metadata)  # Optional Metadata parameter)
 
