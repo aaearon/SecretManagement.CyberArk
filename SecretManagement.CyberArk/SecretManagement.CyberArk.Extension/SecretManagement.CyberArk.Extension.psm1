@@ -82,11 +82,11 @@ function Get-SecretInfo {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
-            $results = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $results = Invoke-GetAIMCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
             $results = $results | Select-Object -Property * -ExcludeProperty Password
         }
         'CentralCredentialProvider' {
-            $results = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $results = Invoke-GetCCPCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
             $results = $results | Select-Object -Property * -ExcludeProperty Content
         }
         'REST' {
