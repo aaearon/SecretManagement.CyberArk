@@ -17,9 +17,11 @@ jobs:
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement
+          Install-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement -Force
+          Import-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement -Force
       - name: Publish Module to PowerShell Gallery
         uses: pcgeek86/publish-powershell-module-action@v20
         id: publish-module
         with:
+          modulePath: SecretManagement.CyberArk
           NuGetApiKey: ${{ secrets.PS_GALLERY_KEY }}
