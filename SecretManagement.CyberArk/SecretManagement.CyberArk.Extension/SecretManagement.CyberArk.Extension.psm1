@@ -14,7 +14,7 @@ function Get-Secret {
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
             if ($null -eq $SafeName) { throw 'SafeName is required for the Credential Provider type' }
-            $Credential = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $Credential = Invoke-GetAIMCredential -Name $Name -SafeName $SafeName -VaultName $VaultName -AdditionalParameters $AdditionalParameters
             if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
         }
         'CentralCredentialProvider' {
