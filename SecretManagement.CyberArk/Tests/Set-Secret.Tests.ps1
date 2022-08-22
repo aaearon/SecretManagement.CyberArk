@@ -31,7 +31,7 @@ Describe 'Set-Secret' {
     Context 'when connection type is Credential Provider' {
         It 'throws an error' {
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider' }
-            { Set-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw 'Set-Secret is not supported for Credential Provider'
+            { Set-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw -ExceptionType System.NotSupportedException -ExpectedMessage 'Set-Secret is not supported for Credential Provider'
             Unregister-SecretVault -Name $VaultName
         }
     }
@@ -39,7 +39,7 @@ Describe 'Set-Secret' {
     Context 'when connection type is Central Credential Provider' {
         It 'throws an error' {
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider' }
-            { Set-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw 'Set-Secret is not supported for Central Credential Provider'
+            { Set-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw -ExceptionType System.NotSupportedException -ExpectedMessage 'Set-Secret is not supported for Central Credential Provider'
             Unregister-SecretVault -Name $VaultName
         }
     }

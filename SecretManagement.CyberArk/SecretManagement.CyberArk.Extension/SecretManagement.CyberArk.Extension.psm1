@@ -132,10 +132,10 @@ function Remove-Secret {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
-            throw 'Remove-Secret is not supported for Credential Provider'
+            throw [System.NotSupportedException]::New('Remove-Secret is not supported for Credential Provider')
         }
         'CentralCredentialProvider' {
-            throw 'Remove-Secret is not supported for Central Credential Provider'
+            throw [System.NotSupportedException]::New('Remove-Secret is not supported for Central Credential Provider')
         }
         'REST' {
             Test-PASSession
@@ -167,10 +167,10 @@ function Set-Secret {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
-            throw 'Set-Secret is not supported for Credential Provider'
+            throw [System.NotSupportedException]::New('Set-Secret is not supported for Credential Provider')
         }
         'CentralCredentialProvider' {
-            throw 'Set-Secret is not supported for Central Credential Provider'
+            throw [System.NotSupportedException]::New('Set-Secret is not supported for Central Credential Provider')
         }
         'REST' {
             if ($null -eq $AdditionalParameters.SafeName -or $null -eq $AdditionalParameters.PlatformId) {
@@ -205,8 +205,20 @@ function Test-SecretVault {
         [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
-    return $true
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
+
+    switch ($VaultParameters.ConnectionType) {
+        'CredentialProvider' {
+            throw [System.NotImplementedException]::New('Test-SecretVault is not supported for Credential Provider')
+        }
+        'CentralCredentialProvider' {
+            throw [System.NotImplementedException]::New('Test-SecretVault is not supported for Central Credential Provider')
+        }
+        'REST' {
+            Test-PASSession
+            return $true
+        }
+    }
 }
 
 function Test-PASSession {
