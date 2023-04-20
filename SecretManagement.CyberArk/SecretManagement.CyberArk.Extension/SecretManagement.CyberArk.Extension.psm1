@@ -226,19 +226,19 @@ function Invoke-GetCCPCredential {
         [hashtable] $AdditionalParameters
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    $GetCCPCredentialParameters = @{
-        AppID  = $VaultParameters.AppID
-        URL    = $VaultParameters.URL
-        Object = $Name
+    if ($null -ne $VaultName) {
+        $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
     }
-    if ($VaultParameters.SkipCertificateCheck) { $GetCCPCredentialParameters.Add('SkipCertificateCheck', $VaultParameters.SkipCertificateCheck) }
-    if ($VaultParameters.UseDefaultCredentials) { $GetCCPCredentialParameters.Add('UseDefaultCredentials', $VaultParameters.UseDefaultCredentials) }
-    if ($VaultParameters.Credential) { $GetCCPCredentialParameters.Add('Credential', $VaultParameters.Credential) }
-    if ($VaultParameters.CertificateThumbPrint) { $GetCCPCredentialParameters.Add('CertificateThumbPrint', $VaultParameters.CertificateThumbPrint) }
-    if ($VaultParameters.Certificate) { $GetCCPCredentialParameters.Add('Certificate', $VaultParameters.Certificatel) }
+    else {
+        $VaultParameters = (Get-SecretVault).VaultParameters
+    }
+    if ($null -eq $VaultParameters) {
+        throw "No vault parameters!"
+    }
 
+    $GetCCPCredentialParameters = [System.Collections.Hashtable]::new($VaultParameters)
+    $GetCCPCredentialParameters.Remove("ConnectionType")
+    $GetCCPCredentialParameters.Add("Object", $Name)
 
     $Credential = Get-CCPCredential @GetCCPCredentialParameters
     return $Credential
