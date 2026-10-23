@@ -37,6 +37,7 @@ All notable changes to this project are documented here. The format is based on 
 
 - Errors from `Get-Secret`, `Get-SecretInfo`, `Set-Secret`, `Remove-Secret` and `Test-SecretVault` reach the caller with their real message instead of SecretManagement's generic "Unable to ...".
 - Unsupported operations, unknown `ConnectionType` and missing `SafeName`/`PlatformId` on `Set-Secret` write errors instead of throwing.
+- `CredentialProvider` vaults accept an optional `SafeName` vault parameter, passed to `Get-AIMCredential` as `-Safe`. Previously it could not be supplied through SecretManagement and was never passed on, and the check for it never fired.
 
 ### Security
 
