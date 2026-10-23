@@ -273,6 +273,18 @@ function Set-Secret {
                 return
             }
 
+            # psPAS -secret takes a SecureString; accept what SecretManagement hands over (PSCredential from Get-Secret, string)
+            $SecretValue = $Secret
+            if ($Secret -is [pscredential]) {
+                $SecretValue = $Secret.Password
+                if (-not $Resolved.ContainsKey('userName') -and -not [string]::IsNullOrEmpty($Secret.UserName)) { $Resolved['userName'] = $Secret.UserName }
+            } elseif ($Secret -is [string]) {
+                $SecretValue = ConvertTo-SecureString -String $Secret -AsPlainText -Force
+            } elseif ($null -ne $Secret -and $Secret -isnot [securestring]) {
+                Write-Error "Set-Secret: unsupported secret type $($Secret.GetType().FullName) for REST; use a SecureString, string or PSCredential"
+                return
+            }
+
             if (-not (Test-PASSession)) { return }
 
             $AddPASAccountParameters = @{
@@ -282,7 +294,7 @@ function Set-Secret {
             if ($Name) { $AddPASAccountParameters.Add('name', $Name) }
             if ($Resolved.ContainsKey('userName')) { $AddPASAccountParameters.Add('userName', $Resolved.userName) }
             if ($Resolved.ContainsKey('address')) { $AddPASAccountParameters.Add('address', $Resolved.address) }
-            if ($Secret) { $AddPASAccountParameters.Add('secret', $Secret) }
+            if ($SecretValue) { $AddPASAccountParameters.Add('secret', $SecretValue) }
 
             Add-PASAccount @AddPASAccountParameters
         }

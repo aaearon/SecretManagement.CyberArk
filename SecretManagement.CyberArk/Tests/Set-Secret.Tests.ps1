@@ -148,6 +148,45 @@ Describe 'Set-Secret' {
             "$Err $Warn" | Should -Not -BeLike "*$Plain*"
         }
 
+        Context 'secret types' {
+            BeforeAll { $Base = @{ SafeName = 'S'; PlatformId = 'P' } }
+
+            It 'converts a string secret to a SecureString' {
+                Set-Secret -Name 'n' -Secret 'plain-pw' -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Base
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
+                    $secret -is [securestring] -and [System.Net.NetworkCredential]::new('', $secret).Password -eq 'plain-pw'
+                }
+            }
+
+            It 'passes a SecureString through' {
+                Set-Secret -Name 'n' -Secret $Sec -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Base
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
+                    $secret -is [securestring] -and [System.Net.NetworkCredential]::new('', $secret).Password -eq $Plain
+                }
+            }
+
+            It 'uses the password of a PSCredential and its UserName when userName is not supplied' {
+                $Cred = [pscredential]::new('cred-user', $Sec)
+                Set-Secret -Name 'n' -Secret $Cred -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Base
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
+                    $secret -is [securestring] -and [System.Net.NetworkCredential]::new('', $secret).Password -eq $Plain -and $userName -eq 'cred-user'
+                }
+            }
+
+            It 'prefers a userName from Metadata over the PSCredential UserName' {
+                $Cred = [pscredential]::new('cred-user', $Sec)
+                Set-Secret -Name 'n' -Secret $Cred -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata ($Base + @{ userName = 'meta-user' })
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $userName -eq 'meta-user' }
+            }
+
+            It 'writes an error without calling Add-PASAccount for an unsupported secret type and never echoes the value' {
+                Set-Secret -Name 'n' -Secret @{ pw = $Plain } -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Base -ErrorAction SilentlyContinue -ErrorVariable Err
+                "$Err" | Should -BeLike '*secret type*'
+                "$Err" | Should -Not -BeLike "*$Plain*"
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+        }
+
         It 'works when called exactly as SecretManagement calls it' {
             $params = @{
                 Name                 = 'n'
