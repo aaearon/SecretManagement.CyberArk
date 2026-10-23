@@ -50,6 +50,8 @@ Only these vault parameters are passed to `Get-CCPCredential`; any other key is 
 
 `AppID`, `URL`, `SkipCertificateCheck`, `UseDefaultCredentials`, `CertificateThumbPrint`, `WebServiceName`, `ConnectionTimeout`, `Method`, `FailRequestOnPasswordChange`
 
+`ConnectionType` and `Verbose` are ignored silently (SecretManagement adds them); other unknown keys produce the warning. Switch parameters (`SkipCertificateCheck`, `UseDefaultCredentials`, `FailRequestOnPasswordChange`) are passed only when true; a false value is omitted, because `Get-CCPCredential` treats a bound `UseDefaultCredentials` as enabled.
+
 `Credential` and `Certificate` objects cannot be used because they cannot be persisted; use `CertificateThumbPrint` for certificate authentication.
 
 ```powershell
@@ -78,7 +80,7 @@ Register-SecretVault -Name CyberArk -ModuleName SecretManagement.CyberArk -Vault
 
 Optional REST vault parameters:
 
-- `Get-Secret`: `safeName` (limits the account search), and the password retrieval options `Reason`, `TicketingSystem`, `TicketId`, `Version`, `ActionType`, `isUse`, `Machine`. They apply to every `Get-Secret` call on that vault, e.g. register a dedicated vault with `Reason = 'To do things'` if policy requires a reason.
+- `Get-Secret`: `safeName` (scopes `Get-Secret`, `Get-SecretInfo` and `Remove-Secret` to that safe; matches in other safes are treated as not found), and the password retrieval options `Reason`, `TicketingSystem`, `TicketId`, `Version`, `ActionType`, `isUse`, `Machine`. They apply to every `Get-Secret` call on that vault, e.g. register a dedicated vault with `Reason = 'To do things'` if policy requires a reason.
 - `Set-Secret`: optional defaults `SafeName`, `PlatformId`, `userName` and `address`; `-Metadata` on each call overrides them (see Set-Secret below).
 
 ## Usage
@@ -91,19 +93,15 @@ You use the typical `SecretManagement` commands such as `Get-Secret` and `Set-Se
 Get-Secret -Name localAdmin01 -VaultName CyberArk
 ```
 
-or
-
-```powershell
-Get-PASAccount -search localAdmin01 -safeName Windows | Get-Secret -VaultName CyberArk
-```
+Pipeline input is not forwarded to the extension: SecretManagement's `Get-Secret` binds piped values to `-Name` (an object is converted to a string), and has no `-PASAccount` parameter. Pipe names only, for example `'localAdmin01' | Get-Secret -Vault CyberArk`.
 
 - **Return type:** a `PSCredential` for all connection types (user name plus password). Callers that previously expected a `SecureString` from Credential Provider or Central Credential Provider should use `.Password` or `.GetNetworkCredential().Password`.
-- **REST name matching:** only accounts whose `name` exactly matches (case-insensitive) are used; substring-only hits count as not found. If several accounts match, one error states the count and name and nothing is returned. Passing a `PASAccount` object bypasses the name check.
+- **REST name matching:** only accounts whose `name` exactly matches (case-insensitive) are used; substring-only hits count as not found. If several accounts match, one error states the count and name and nothing is returned.
 - **Not found:** the extension returns `$null`, which SecretManagement reports as "The secret ... was not found".
 
 ### Set-Secret
 
-REST only. Pass the target as `-Metadata`; keys are case-insensitive. `SafeName` and `PlatformId` are required, `address` and `userName` optional. Any `VaultParameters` with the same names act as defaults: a non-empty Metadata value wins per key, otherwise the vault parameter is used. Other Metadata keys are ignored. If `SafeName` or `PlatformId` is missing from both, an error is written and nothing is created.
+REST only. `-Secret` may be a `SecureString`, a string or a `PSCredential` (its password is used, and its user name unless `userName` comes from `-Metadata` or the vault parameters). Pass the target as `-Metadata`; keys are case-insensitive. `SafeName` and `PlatformId` are required, `address` and `userName` optional. Any `VaultParameters` with the same names act as defaults: a non-empty Metadata value wins per key, otherwise the vault parameter is used. Other Metadata keys are ignored. If `SafeName` or `PlatformId` is missing from both, an error is written and nothing is created.
 
 ```powershell
 $Secret = ConvertTo-SecureString 'verySecret!' -AsPlainText -Force
@@ -129,8 +127,8 @@ Returns `PSCredential`-typed entries with a fixed metadata allowlist (string, in
 
 | ConnectionType | Wildcards in `-Name` | Metadata |
 |---|---|---|
-| `REST` | Supported (`-like`); a plain name matches exactly | `id`, `name`, `userName`, `address`, `safeName`, `platformId`, `secretType`, `createdTime` (UTC `DateTime`) |
-| `CredentialProvider`, `CentralCredentialProvider` | Not supported: they cannot enumerate, so a wildcard (including the default `*`) returns nothing; give the exact object name | `Name`, `UserName`, `Address`, `Safe`, `Folder`, `PolicyID`, `DeviceType` |
+| `REST` | Supported (`-like`, including `[a-z]` classes and `` `* `` escapes); a plain name matches exactly | `id`, `name`, `userName`, `address`, `safeName`, `platformId`, `secretType`, `createdTime` (UTC `DateTime`) |
+| `CredentialProvider`, `CentralCredentialProvider` | Not supported: they cannot enumerate, so a wildcard (including the default `*`) returns nothing; give the exact object name | `Name`, `UserName`, `Address`, `Safe`, `Folder`, `PolicyID`, `DeviceType` (for `CredentialProvider` the entry name is the `UserName` you looked up, so it can be passed back to `Get-Secret`) |
 
 ### Test-SecretVault
 
