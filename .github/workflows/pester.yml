@@ -1,21 +1,44 @@
 name: Run Pester tests
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
 jobs:
   pester-test:
-    name: Run Pester tests
+    name: Run Pester tests (${{ matrix.os }} / psPAS ${{ matrix.pspas }})
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        pspas: ['7.0.242', 'latest']
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Installs dependencies
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module Pester -MinimumVersion 5.2.0 -MaximumVersion 5.99.99 -Force -SkipPublisherCheck
-          Install-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement
+          Install-Module CredentialRetriever, Microsoft.PowerShell.SecretManagement
+          if ('${{ matrix.pspas }}' -eq 'latest') {
+            Install-Module psPAS -Force
+          } else {
+            Install-Module psPAS -RequiredVersion ${{ matrix.pspas }} -Force
+          }
+      - name: Verify psPAS version
+        shell: pwsh
+        run: |
+          $requested = '${{ matrix.pspas }}'
+          $loaded = Import-Module psPAS -Force -PassThru
+          $loaded | Select-Object Name, Version | Format-Table | Out-String | Write-Host
+          if ($requested -ne 'latest' -and $loaded.Version -ne [version]$requested) {
+            throw "Requested psPAS $requested but loaded $($loaded.Version)"
+          }
       - name: Executes Pester tests
         shell: pwsh
         run: |
