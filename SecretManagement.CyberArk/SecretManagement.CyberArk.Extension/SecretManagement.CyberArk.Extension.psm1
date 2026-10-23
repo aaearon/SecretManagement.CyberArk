@@ -13,7 +13,7 @@ function Get-Secret {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
-            if ($null -eq $SafeName) { throw 'SafeName is required for the Credential Provider type' }
+            if ($null -eq $SafeName) { Write-Error 'SafeName is required for the Credential Provider type'; return }
             $Credential = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
             if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
         }
@@ -23,7 +23,7 @@ function Get-Secret {
         }
 
         'REST' {
-            Test-PASSession
+            if (-not (Test-PASSession)) { return }
 
             if ($PASAccount) {
                 $Account = Get-PASAccount -id $PASAccount.Id
@@ -40,8 +40,8 @@ function Get-Secret {
                 }
                 if ($results.Count -gt 1) {
                     $message = "Found $($results.Count) accounts named '$Name'. Use a unique name or the PASAccount parameter."
-                    Write-Warning $message
-                    throw $message
+                    Write-Error $message
+                    return
                 }
                 $Account = $results[0]
             }
@@ -61,12 +61,14 @@ function Get-Secret {
                 $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
                 $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
             } catch {
-                $Credential = $null
+                Write-Error "Failed to retrieve the password for account '$Name': $($_.Exception.Message)"
+                return
             }
         }
 
         default {
-            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            return
         }
     }
 
@@ -96,12 +98,13 @@ function Get-SecretInfo {
         }
         'REST' {
             $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
-            Test-PASSession
+            if (-not (Test-PASSession)) { return }
 
             $results = Get-PASAccount -search "$Filter"
         }
         Default {
-            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            return
         }
     }
 
@@ -135,26 +138,31 @@ function Remove-Secret {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
-            throw 'Remove-Secret is not supported for Credential Provider'
+            Write-Error 'Remove-Secret is not supported for Credential Provider'
+            return
         }
         'CentralCredentialProvider' {
-            throw 'Remove-Secret is not supported for Central Credential Provider'
+            Write-Error 'Remove-Secret is not supported for Central Credential Provider'
+            return
         }
         'REST' {
-            Test-PASSession
+            if (-not (Test-PASSession)) { return }
 
             $results = @(Get-PASAccount -search "$Name" | Where-Object { $PSItem.name -eq $Name })
 
             if ($results.Count -eq 0) {
-                throw "No account found with name $Name. Not deleting anything."
+                Write-Error "No account found with name $Name. Not deleting anything."
+                return
             } elseif ($results.Count -gt 1) {
-                throw "Multiple accounts found with name $Name. Not deleting anything."
+                Write-Error "Multiple accounts found with name $Name. Not deleting anything."
+                return
             }
 
             Remove-PASAccount -id $results[0].Id
         }
         Default {
-            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            return
         }
     }
 }
@@ -172,17 +180,20 @@ function Set-Secret {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
-            throw 'Set-Secret is not supported for Credential Provider'
+            Write-Error 'Set-Secret is not supported for Credential Provider'
+            return
         }
         'CentralCredentialProvider' {
-            throw 'Set-Secret is not supported for Central Credential Provider'
+            Write-Error 'Set-Secret is not supported for Central Credential Provider'
+            return
         }
         'REST' {
             if ($null -eq $AdditionalParameters.SafeName -or $null -eq $AdditionalParameters.PlatformId) {
-                throw 'SafeName and PlatformId are required keys in $AdditionalParameters'
+                Write-Error 'SafeName and PlatformId are required keys in $AdditionalParameters'
+                return
             }
 
-            Test-PASSession
+            if (-not (Test-PASSession)) { return }
 
             $AddPASAccountParameters = @{
                 SafeName   = $AdditionalParameters.SafeName
@@ -196,7 +207,8 @@ function Set-Secret {
             Add-PASAccount @AddPASAccountParameters
         }
         Default {
-            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            return
         }
     }
 }
@@ -225,8 +237,7 @@ function Test-SecretVault {
             return $true
         }
         'REST' {
-            Test-PASSession
-            return $true
+            return (Test-PASSession)
         }
         Default {
             Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
@@ -239,9 +250,10 @@ function Test-PASSession {
     try {
         if (-not (Get-PASSession).BaseURI) { throw 'No active session' }
     } catch {
-        throw 'Failed to get PASSession. Run New-PASSession again.'
+        Write-Error 'Failed to get PASSession. Run New-PASSession again.'
+        return $false
     }
-
+    return $true
 }
 
 function Invoke-GetCCPCredential {
@@ -259,7 +271,8 @@ function Invoke-GetCCPCredential {
         $VaultParameters = (Get-SecretVault).VaultParameters
     }
     if ($null -eq $VaultParameters) {
-        throw "No vault parameters!"
+        Write-Error 'No vault parameters!'
+        return
     }
 
     $GetCCPCredentialParameters = [System.Collections.Hashtable]::new($VaultParameters)

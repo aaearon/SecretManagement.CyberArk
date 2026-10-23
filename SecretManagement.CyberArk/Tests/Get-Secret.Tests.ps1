@@ -63,7 +63,7 @@ Describe 'Get-Secret' {
                 Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
             }
 
-            It 'throws and does not retrieve a password when more than one exact match is found' {
+            It 'writes an error and does not retrieve a password when more than one exact match is found' {
                 Mock Get-PASAccount -MockWith {
                     @(
                         [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1' },
@@ -71,9 +71,9 @@ Describe 'Get-Secret' {
                     )
                 } -ModuleName $ExtensionModule.Name
 
-                { Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction Stop } | Should -Throw '*2*admin*'
-                try { Get-Secret -Name 'admin' -VaultName $VaultName -WarningVariable Warn } catch { }
-                "$Warn" | Should -BeLike '*2*admin*'
+                Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err -WarningAction SilentlyContinue -WarningVariable Warn | Should -BeNullOrEmpty
+                "$Err" | Should -BeLike '*2*admin*'
+                $Warn | Should -BeNullOrEmpty
                 Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
             }
 
@@ -91,10 +91,37 @@ Describe 'Get-Secret' {
             }
         }
 
+        It 'writes an error with the underlying message when retrieving the password fails' {
+            Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1' } } -ModuleName $ExtensionModule.Name
+            Mock Get-PASAccountPassword -MockWith { throw 'access denied by policy' } -ModuleName $ExtensionModule.Name
+
+            Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*admin*access denied by policy*'
+        }
+
+        It 'writes an error when there is no PASSession' {
+            Mock Get-PASSession -MockWith { throw 'no session' } -ModuleName $ExtensionModule.Name
+            Mock Get-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
+
+            Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*Failed to get PASSession*'
+            Should -Invoke -CommandName Get-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+        }
+
         It 'should have a PASAccount parameter' {
             'PASAccount' | Should -BeIn ((Get-Command -Module $ExtensionModule.Name -Name 'Get-Secret').Parameters.Keys)
         }
         AfterAll {
+            Unregister-SecretVault -Name $VaultName
+        }
+    }
+
+    Context 'when connection type is unknown' {
+        It 'writes an error' {
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'Bogus' }
+            Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*ConnectionType Bogus is not supported*'
             Unregister-SecretVault -Name $VaultName
         }
     }
