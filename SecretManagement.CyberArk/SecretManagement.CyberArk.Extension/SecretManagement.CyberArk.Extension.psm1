@@ -211,10 +211,15 @@ function Test-SecretVault {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
-            return [bool]($VaultParameters.AppID -and (Get-Command -Name Get-AIMCredential -ErrorAction SilentlyContinue))
+            if (-not $VaultParameters.AppID) { Write-Error 'CredentialProvider vault parameter AppID is missing'; return $false }
+            if (-not (Get-Command -Name Get-AIMCredential -ErrorAction SilentlyContinue)) { Write-Error 'Get-AIMCredential command not found'; return $false }
+            return $true
         }
         'CentralCredentialProvider' {
-            return [bool]($VaultParameters.AppID -and $VaultParameters.URL -and (Get-Command -Name Get-CCPCredential -ErrorAction SilentlyContinue))
+            if (-not $VaultParameters.AppID) { Write-Error 'CentralCredentialProvider vault parameter AppID is missing'; return $false }
+            if (-not $VaultParameters.URL) { Write-Error 'CentralCredentialProvider vault parameter URL is missing'; return $false }
+            if (-not (Get-Command -Name Get-CCPCredential -ErrorAction SilentlyContinue)) { Write-Error 'Get-CCPCredential command not found'; return $false }
+            return $true
         }
         'REST' {
             Test-PASSession
@@ -229,7 +234,7 @@ function Test-SecretVault {
 
 function Test-PASSession {
     try {
-        $null = Get-PASSession
+        if (-not (Get-PASSession).BaseURI) { throw 'No active session' }
     } catch {
         throw 'Failed to get PASSession. Run New-PASSession again.'
     }

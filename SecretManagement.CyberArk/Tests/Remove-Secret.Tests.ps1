@@ -21,6 +21,7 @@ Describe 'Remove-Secret' {
     Context 'when connection type is REST' {
         BeforeAll {
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
+            Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
         It 'throws and does not remove when only substring matches are found' {

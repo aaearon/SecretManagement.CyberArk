@@ -53,7 +53,7 @@ Register-SecretVault -Name CyberArk -ModuleName SecretManagement.CyberArk -Vault
 
 ### REST API
 
-Specify `REST` as the `ConnectionType` and an existing `PASSession` will be used.
+Specify `REST` as the `ConnectionType` and an existing `PASSession` (created with `New-PASSession`) will be used; commands fail with 'Failed to get PASSession' if there is no active session.
 
 ```powershell
 $VaultParameters = @{
@@ -112,4 +112,4 @@ Note: The value passed to the `Name` argument will be used as the `name` propert
 
 ## Test-SecretVault
 
-`Test-SecretVault` checks the vault per `ConnectionType` without network calls for the Credential Provider types: `REST` requires an existing `PASSession`; `CredentialProvider` requires `AppID` and the `Get-AIMCredential` command; `CentralCredentialProvider` requires `AppID`, `URL` and the `Get-CCPCredential` command. Unsupported types return `$false` with an error.
+`Test-SecretVault` checks the vault per `ConnectionType` without network calls for the Credential Provider types: `REST` requires an active `PASSession` (throws otherwise); `CredentialProvider` requires `AppID` and the `Get-AIMCredential` command; `CentralCredentialProvider` requires `AppID`, `URL` and the `Get-CCPCredential` command. A missing requirement or unsupported type writes an error naming what is missing and returns `$false`.

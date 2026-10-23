@@ -24,6 +24,7 @@ Describe 'Get-SecretInfo' {
         BeforeAll {
 
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
+            Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
         It 'returns information on a secret' {
