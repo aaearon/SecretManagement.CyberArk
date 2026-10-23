@@ -34,7 +34,8 @@ jobs:
         shell: pwsh
         run: |
           $requested = '${{ matrix.pspas }}'
-          $loaded = Import-Module psPAS -Force -PassThru
+          # -PassThru also returns psPAS's nested modules (e.g. subscriberClasses in 7.x)
+          $loaded = Import-Module psPAS -Force -PassThru | Where-Object Name -eq 'psPAS'
           $loaded | Select-Object Name, Version | Format-Table | Out-String | Write-Host
           if ($requested -ne 'latest' -and $loaded.Version -ne [version]$requested) {
             throw "Requested psPAS $requested but loaded $($loaded.Version)"
