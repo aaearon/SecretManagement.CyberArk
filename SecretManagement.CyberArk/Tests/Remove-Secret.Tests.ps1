@@ -24,6 +24,21 @@ Describe 'Remove-Secret' {
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
+        It 'writes an error with the exception message when the lookup throws' {
+            Mock Get-PASAccount -MockWith { throw 'lookup exploded' } -ModuleName $ExtensionModule.Name
+            Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
+            Remove-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*lookup exploded*'
+            Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+        }
+
+        It 'writes an error with the exception message when removal throws' {
+            Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; Id = '1' } } -ModuleName $ExtensionModule.Name
+            Mock Remove-PASAccount -MockWith { throw 'delete denied' } -ModuleName $ExtensionModule.Name
+            Remove-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*delete denied*'
+        }
+
         It 'errors and does not remove when only substring matches are found' {
             Mock Get-PASAccount -MockWith {
                 @(

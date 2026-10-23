@@ -113,6 +113,44 @@ Describe 'Get-Secret' {
             Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
 
+        Context 'direct PASAccount' {
+            BeforeEach {
+                Mock Get-PASAccountPassword -MockWith {} -ModuleName $ExtensionModule.Name
+            }
+
+            It 'errors and fetches no password when the account is in a different safe than the vault safeName' {
+                Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; Id = '9'; safeName = 'SafeB' } } -ModuleName $ExtensionModule.Name
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ safeName = 'safea' }) -PASAccount ([PSCustomObject]@{ Id = '9' }) -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+                "$Err" | Should -BeLike '*safe*'
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+
+            It 'errors and fetches no password when the account has no safeName and the vault is scoped' {
+                Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; Id = '9' } } -ModuleName $ExtensionModule.Name
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ safeName = 'SafeA' }) -PASAccount ([PSCustomObject]@{ Id = '9' }) -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+                "$Err" | Should -BeLike '*safe*'
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+
+            It 'fetches the password when the safe matches case-insensitively' {
+                Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '9'; safeName = 'SAFEA' } } -ModuleName $ExtensionModule.Name
+                Mock Get-PASAccountPassword -MockWith {
+                    $R = [PSCustomObject]@{ Password = 'fake' }
+                    $R | Add-Member -MemberType ScriptMethod -Name ToSecureString -Value { $this.Password | ConvertTo-SecureString -AsPlainText -Force }
+                    $R
+                } -ModuleName $ExtensionModule.Name
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ safeName = 'safea' }) -PASAccount ([PSCustomObject]@{ Id = '9' }) | Should -BeOfType System.Management.Automation.PSCredential
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $AccountId -eq '9' }
+            }
+
+            It 'writes an error instead of throwing when the by-id lookup throws' {
+                Mock Get-PASAccount -MockWith { throw 'id lookup failed' } -ModuleName $ExtensionModule.Name
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -PASAccount ([PSCustomObject]@{ Id = '9' }) -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+                "$Err" | Should -BeLike '*id lookup failed*'
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+        }
+
         It 'writes an error with the underlying message when retrieving the password fails' {
             Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1' } } -ModuleName $ExtensionModule.Name
             Mock Get-PASAccountPassword -MockWith { throw 'access denied by policy' } -ModuleName $ExtensionModule.Name

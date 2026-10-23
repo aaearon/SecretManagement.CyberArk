@@ -28,7 +28,17 @@ function Get-Secret {
             if (-not (Test-PASSession)) { return }
 
             if ($PASAccount) {
-                $Account = Get-PASAccount -id $PASAccount.Id
+                $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
+                try {
+                    $Account = Get-PASAccount -id $PASAccount.Id
+                } catch {
+                    Write-Error "Failed to look up account '$Name': $($_.Exception.Message)"
+                    return
+                }
+                if ($VaultSafe -and -not ($Account.safeName -ieq $VaultSafe)) {
+                    Write-Error "Account '$Name' is not in the vault's safe '$VaultSafe'. Not retrieving the password."
+                    return
+                }
             } else {
                 $GetPASAccountParameters = @{
                     search = $Name
@@ -148,7 +158,12 @@ function Get-SecretInfo {
             if ($SearchText) { $GetPASAccountParameters.search = $SearchText }
             $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
             if ($VaultSafe) { $GetPASAccountParameters.safeName = $VaultSafe }
-            $results = Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -like $Filter } | Select-AccountInVaultSafe -SafeName $VaultSafe
+            try {
+                $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -like $Filter } | Select-AccountInVaultSafe -SafeName $VaultSafe)
+            } catch {
+                Write-Error "Failed to look up accounts matching '$Filter': $($_.Exception.Message)"
+                return
+            }
         }
         Default {
             Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
@@ -229,7 +244,12 @@ function Remove-Secret {
             $GetPASAccountParameters = @{ search = "$Name" }
             $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
             if ($VaultSafe) { $GetPASAccountParameters.safeName = $VaultSafe }
-            $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $PSItem.name -eq $Name } | Select-AccountInVaultSafe -SafeName $VaultSafe)
+            try {
+                $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $PSItem.name -eq $Name } | Select-AccountInVaultSafe -SafeName $VaultSafe)
+            } catch {
+                Write-Error "Failed to look up account '$Name': $($_.Exception.Message)"
+                return
+            }
 
             if ($results.Count -eq 0) {
                 Write-Error "No account found with name $Name. Not deleting anything."
@@ -239,7 +259,12 @@ function Remove-Secret {
                 return
             }
 
-            Remove-PASAccount -id $results[0].Id
+            try {
+                Remove-PASAccount -id $results[0].Id
+            } catch {
+                Write-Error "Failed to remove account '$Name': $($_.Exception.Message)"
+                return
+            }
         }
         Default {
             Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"

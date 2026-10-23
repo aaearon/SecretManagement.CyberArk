@@ -67,6 +67,12 @@ Describe 'Get-SecretInfo' {
             Should -Invoke -CommandName Get-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $safeName -eq 'safea' }
         }
 
+        It 'writes an error with the exception message instead of throwing when the lookup fails' {
+            Mock Get-PASAccount -MockWith { throw 'pvwa unreachable' } -ModuleName $ExtensionModule.Name
+            Get-SecretInfo -Filter '*' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*pvwa unreachable*'
+        }
+
         It 'converts createdTime given in milliseconds' {
             Mock Get-PASAccount -MockWith { [PSCustomObject]@{ id = '7'; name = 'acct'; createdTime = 1700000000000 } } -ModuleName $ExtensionModule.Name
             $Info = Get-SecretInfo -Filter 'acct' -VaultName $VaultName -AdditionalParameters $VaultParams
