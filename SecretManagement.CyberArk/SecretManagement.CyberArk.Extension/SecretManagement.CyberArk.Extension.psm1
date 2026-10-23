@@ -15,11 +15,11 @@ function Get-Secret {
         'CredentialProvider' {
             if ($null -eq $SafeName) { Write-Error 'SafeName is required for the Credential Provider type'; return }
             $Credential = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
-            if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
+            if ($null -ne $Credential) { $Credential = $Credential.ToCredential() }
         }
         'CentralCredentialProvider' {
             $Credential = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
-            if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
+            if ($null -ne $Credential) { $Credential = $Credential.ToCredential() }
         }
 
         'REST' {
@@ -87,12 +87,12 @@ function Get-SecretInfo {
 
     switch ($VaultParameters.ConnectionType) {
         'CredentialProvider' {
-            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::SecureString
+            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
             $results = Invoke-GetAIMCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
             $results = $results | Select-Object -Property * -ExcludeProperty Password
         }
         'CentralCredentialProvider' {
-            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::SecureString
+            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
             $results = Invoke-GetCCPCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
             $results = $results | Select-Object -Property * -ExcludeProperty Content
         }
@@ -301,7 +301,9 @@ function Invoke-GetAIMCredential {
         UserName = $Name
     }
     if ($SafeName) { $GetAIMCredentialParameters.Add('SafeName', $SafeName) }
-    if ($AdditionalParameters.RequiredProps) { $GetAIMCredentialParameters.Add('RequiredProps', $AdditionalParameters.RequiredProps) }
+    # UserName is always requested so a PSCredential can be built
+    $RequiredProps = @($AdditionalParameters.RequiredProps) + 'UserName' | Where-Object { $_ } | Select-Object -Unique
+    $GetAIMCredentialParameters.Add('RequiredProps', $RequiredProps)
 
     $Credential = Get-AIMCredential @GetAIMCredentialParameters
     return $Credential
