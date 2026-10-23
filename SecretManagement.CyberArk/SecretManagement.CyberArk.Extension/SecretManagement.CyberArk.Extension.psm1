@@ -39,7 +39,9 @@ function Get-Secret {
                     return $null
                 }
                 if ($results.Count -gt 1) {
-                    throw "Found $($results.Count) accounts named '$Name'. Use a unique name or the PASAccount parameter."
+                    $message = "Found $($results.Count) accounts named '$Name'. Use a unique name or the PASAccount parameter."
+                    Write-Warning $message
+                    throw $message
                 }
                 $Account = $results[0]
             }

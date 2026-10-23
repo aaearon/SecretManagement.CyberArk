@@ -69,6 +69,8 @@ Describe 'Get-Secret' {
                 } -ModuleName $ExtensionModule.Name
 
                 { Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction Stop } | Should -Throw '*2*admin*'
+                try { Get-Secret -Name 'admin' -VaultName $VaultName -WarningVariable Warn } catch { }
+                "$Warn" | Should -BeLike '*2*admin*'
                 Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
             }
 

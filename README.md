@@ -81,7 +81,7 @@ or
 Get-PASAccount -search localAdmin01 -safeName Windows | Get-Secret -VaultName CyberArk
 ```
 
-Note: `Get-Secret` only considers accounts whose `name` exactly matches `-Name` (case-insensitive). If none match, nothing is returned; if more than one matches, it throws and no password is retrieved.
+Note: for REST lookups by `-Name`, `Get-Secret` only considers accounts whose `name` exactly matches (case-insensitive); passing a `PASAccount` object bypasses this. If none match, the extension returns `$null`; if more than one matches, it writes a warning naming the count and throws, and no password is retrieved. Through the public `Get-Secret`, SecretManagement may replace either outcome with its own "not found" / "unable to get secret" error instead of `$null` or the extension's exception.
 
 To retrieve the password for an account named `linuxAdmin01` where policy requires a reason:
 
