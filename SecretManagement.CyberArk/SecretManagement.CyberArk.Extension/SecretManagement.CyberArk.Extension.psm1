@@ -33,14 +33,17 @@ function Get-Secret {
                 }
                 if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add('safeName', $AdditionalParameters.safeName) }
 
-                $results = Get-PASAccount @GetPASAccountParameters
+                $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -eq $Name })
 
-                if ($results.Count -gt 1) {
-                    Write-Warning "Multiple matches found with name $Name. Returning the first match."
-                    $Account = $results[0]
-                } else {
-                    $Account = $results
+                if ($results.Count -eq 0) {
+                    return $null
                 }
+                if ($results.Count -gt 1) {
+                    $message = "Found $($results.Count) accounts named '$Name'. Use a unique name or the PASAccount parameter."
+                    Write-Warning $message
+                    throw $message
+                }
+                $Account = $results[0]
             }
 
             $GetPASAccountPasswordParameters = @{

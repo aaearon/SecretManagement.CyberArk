@@ -40,26 +40,53 @@ Describe 'Get-Secret' {
         } -TestCases (
             @{SecretName = 'localAdmin01'; PSType = 'System.Management.Automation.PSCredential' }
         )
-        It 'should show a warning when multiple secrets are found' {
-            Mock Get-PASAccount -MockWith {
-                $Results = @(
-                    [PSCustomObject]@{
-                        name     = 'localAdmin01'
-                        userName = 'localAdmin01'
-                        Id       = '1'
-                    },
-                    [PSCustomObject]@{
-                        name     = 'localAdmin02'
-                        userName = 'localAdmin02'
-                        Id       = '2'
-                    }
-                )
-                return $Results
-            } -ModuleName $ExtensionModule.Name
-            Mock Write-Warning -MockWith {} -ModuleName $ExtensionModule.Name
+        Context 'when the search returns several accounts' {
+            BeforeEach {
+                Mock Get-PASAccountPassword -MockWith {
+                    $Result = [PSCustomObject]@{ Password = 'fake'; userName = 'admin' }
+                    $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this | Select-Object -ExpandProperty Password | ConvertTo-SecureString -AsPlainText -Force }
+                    return $Result
+                } -ModuleName $ExtensionModule.Name
+            }
 
-            Get-Secret -Name 'admin' -VaultName $VaultName
-            Should -Invoke -CommandName Write-Warning -ModuleName $ExtensionModule.Name
+            It 'returns null and does not retrieve a password when only substring matches are found' {
+                Mock Get-PASAccount -MockWith {
+                    @(
+                        [PSCustomObject]@{ name = 'localAdmin01'; userName = 'localAdmin01'; Id = '1' },
+                        [PSCustomObject]@{ name = 'localAdmin02'; userName = 'localAdmin02'; Id = '2' }
+                    )
+                } -ModuleName $ExtensionModule.Name
+
+                Get-Secret -Name 'admin' -VaultName $VaultName | Should -BeNullOrEmpty
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+
+            It 'throws and does not retrieve a password when more than one exact match is found' {
+                Mock Get-PASAccount -MockWith {
+                    @(
+                        [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1' },
+                        [PSCustomObject]@{ name = 'ADMIN'; userName = 'ADMIN'; Id = '2' }
+                    )
+                } -ModuleName $ExtensionModule.Name
+
+                { Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction Stop } | Should -Throw '*2*admin*'
+                try { Get-Secret -Name 'admin' -VaultName $VaultName -WarningVariable Warn } catch { }
+                "$Warn" | Should -BeLike '*2*admin*'
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+
+            It 'returns the single exact match among substring matches' {
+                Mock Get-PASAccount -MockWith {
+                    @(
+                        [PSCustomObject]@{ name = 'admin2'; userName = 'admin2'; Id = '1' },
+                        [PSCustomObject]@{ name = 'ADMIN'; userName = 'admin'; Id = '2' },
+                        [PSCustomObject]@{ name = 'localadmin'; userName = 'localadmin'; Id = '3' }
+                    )
+                } -ModuleName $ExtensionModule.Name
+
+                Get-Secret -Name 'admin' -VaultName $VaultName | Should -BeOfType System.Management.Automation.PSCredential
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $AccountId -eq '2' }
+            }
         }
 
         It 'should have a PASAccount parameter' {
