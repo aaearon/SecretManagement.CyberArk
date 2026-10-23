@@ -15,21 +15,22 @@ Describe 'Set-Secret' {
     Context 'when connection method is REST' {
         BeforeAll {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
+            $VaultParams = @{ConnectionType = 'REST' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
         It 'calls Add-PASAccount' {
             Mock Add-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            Set-Secret -VaultName $VaultName -Name 'test' -AdditionalParameters @{PlatformId = 'Test'; SafeName = 'TestSafe' } -Secret ('test' | ConvertTo-SecureString -AsPlainText -Force)
+            Set-Secret -VaultName $VaultName -Name 'test' -AdditionalParameters ($VaultParams + @{PlatformId = 'Test'; SafeName = 'TestSafe' }) -Secret ('test' | ConvertTo-SecureString -AsPlainText -Force)
             Should -Invoke -CommandName Add-PASAccount -ModuleName $ExtensionModule.Name
         }
 
         It 'writes an error when SafeName and PlatformId are missing' {
             Mock Add-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            Set-Secret -VaultName $VaultName -Name 'test' -Secret ('test' | ConvertTo-SecureString -AsPlainText -Force) -ErrorAction SilentlyContinue -ErrorVariable Err
+            Set-Secret -VaultName $VaultName -AdditionalParameters $VaultParams -Name 'test' -Secret ('test' | ConvertTo-SecureString -AsPlainText -Force) -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*SafeName and PlatformId are required*'
             Should -Invoke -CommandName Add-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
@@ -42,8 +43,9 @@ Describe 'Set-Secret' {
     Context 'when connection type is Credential Provider' {
         It 'writes an error' {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider' }
-            Set-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            $VaultParams = @{ConnectionType = 'CredentialProvider' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
+            Set-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Set-Secret is not supported for Credential Provider*'
             Unregister-SecretVault -Name $VaultName
         }
@@ -52,8 +54,9 @@ Describe 'Set-Secret' {
     Context 'when connection type is Central Credential Provider' {
         It 'writes an error' {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider' }
-            Set-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            $VaultParams = @{ConnectionType = 'CentralCredentialProvider' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
+            Set-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Set-Secret is not supported for Central Credential Provider*'
             Unregister-SecretVault -Name $VaultName
         }
