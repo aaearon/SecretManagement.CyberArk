@@ -30,7 +30,7 @@ All options are read from the `VaultParameters` given at registration. `Get-Secr
 
 Specify `CredentialProvider` as the `ConnectionType`, the `AppID` to authenticate as, and optionally a `ClientPath` to the Credential Provider executable (otherwise it will use the existing `ClientPath` previously set via `Set-AIMConfiguration`.)
 
-`SafeName` is optional: when set, every lookup on that vault is scoped to that safe (passed to `Get-AIMCredential` as `-Safe`). Without it the lookup is by object name only, so it must be unique across the safes `AppID` can see.
+`SafeName` is optional: when set, every lookup on that vault is scoped to that safe (passed to `Get-AIMCredential` as `-Safe`). The secret name you request is passed to `Get-AIMCredential` as `-UserName` (not as the object name). Without `SafeName` the lookup is by that UserName only, so it must be unique across the safes `AppID` can see.
 
 ```powershell
 $VaultParameters = @{
@@ -128,7 +128,7 @@ Returns `PSCredential`-typed entries with a fixed metadata allowlist (string, in
 | ConnectionType | Wildcards in `-Name` | Metadata |
 |---|---|---|
 | `REST` | Supported (`-like`, including `[a-z]` classes and `` `* `` escapes); a plain name matches exactly | `id`, `name`, `userName`, `address`, `safeName`, `platformId`, `secretType`, `createdTime` (UTC `DateTime`) |
-| `CredentialProvider`, `CentralCredentialProvider` | Not supported: they cannot enumerate, so a wildcard (including the default `*`) returns nothing; give the exact object name | `Name`, `UserName`, `Address`, `Safe`, `Folder`, `PolicyID`, `DeviceType` (for `CredentialProvider` the entry name is the `UserName` you looked up, so it can be passed back to `Get-Secret`) |
+| `CredentialProvider`, `CentralCredentialProvider` | Not supported: they cannot enumerate, so a wildcard (including the default `*`) returns nothing; give the exact name (for `CredentialProvider` the account `UserName`, for `CentralCredentialProvider` the object name) | `Name`, `UserName`, `Address`, `Safe`, `Folder`, `PolicyID`, `DeviceType` (for `CredentialProvider` the entry name is the `UserName` you looked up, so it can be passed back to `Get-Secret`) |
 
 ### Test-SecretVault
 

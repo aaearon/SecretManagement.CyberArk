@@ -13,7 +13,7 @@ All notable changes to this project are documented here. The format is based on 
 - `Get-Secret -AdditionalParameters @{...}` per-call options never worked through the public cmdlet and are documented as removed; options come from the registered `VaultParameters`. Re-register the vault with the options you need.
 - `CentralCredentialProvider` vault parameters are an allowlist; `Credential`, `Certificate` and any other key are ignored with a warning. Use `CertificateThumbPrint` instead of `Certificate`/`Credential`.
 - `Get-SecretInfo` metadata is a fixed allowlist (see README); other properties are no longer included.
-- `Get-SecretInfo` with a wildcard (including the default `*`) on the Credential Provider types returns nothing; specify the exact object name.
+- `Get-SecretInfo` with a wildcard (including the default `*`) on the Credential Provider types returns nothing; specify the exact name (the `UserName` for Credential Provider, the object name for Central Credential Provider).
 - The extension's `Get-Secret` and `Invoke-GetAIMCredential` `-SafeName` function parameter was removed. This only affects direct callers of the extension functions; use the `SafeName` vault parameter.
 - Failures are written with `Write-Error` rather than thrown, and `Test-SecretVault` returns `$false`. Use `-ErrorAction Stop` to get terminating errors.
 - Minimum dependency versions: psPAS 7.0.242, CredentialRetriever 4.0.0, Microsoft.PowerShell.SecretManagement 1.1.2.
