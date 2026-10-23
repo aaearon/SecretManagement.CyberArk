@@ -24,6 +24,7 @@ All notable changes to this project are documented here. The format is based on 
 - `Test-SecretVault` checks per `ConnectionType`: REST needs an active session; `CredentialProvider` needs `AppID` and `Get-AIMCredential`; `CentralCredentialProvider` needs `AppID`, `URL` and `Get-CCPCredential`.
 - `Get-SecretInfo` wildcard filtering for REST, and metadata including `createdTime` (UTC `DateTime`); `UserName` is always requested from the Credential Provider and included.
 - New `CentralCredentialProvider` vault parameters: `WebServiceName`, `ConnectionTimeout`, `Method`, `FailRequestOnPasswordChange`.
+- Pester integration test driving the public SecretManagement cmdlets in a child process with a temporary registry.
 - Pester coverage for vault parameter handling, error surfacing, name matching and metadata.
 - Static compatibility audit against psPAS 8.2.0 (no code changes required; not exercised against a live CyberArk).
 
