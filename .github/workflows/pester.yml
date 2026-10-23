@@ -14,12 +14,12 @@ jobs:
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck
+          Install-Module Pester -MinimumVersion 5.2.0 -MaximumVersion 5.99.99 -Force -SkipPublisherCheck
           Install-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement
       - name: Executes Pester tests
         shell: pwsh
         run: |
-          Import-Module Pester -MinimumVersion 5.0.0
+          Import-Module Pester -MinimumVersion 5.2.0 -MaximumVersion 5.99.99
           Import-Module Microsoft.PowerShell.SecretManagement -Force
           $config = New-PesterConfiguration
           $config.Run.Path = './SecretManagement.CyberArk/Tests'
