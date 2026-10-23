@@ -135,9 +135,17 @@ Describe 'Get-Secret' {
         }
 
         It 'invokes Get-CCPCredential' {
-            Mock Get-CCPCredential -MockWith {} -ModuleName $ExtensionModule.Name
-            Get-Secret -Name 'admin' -VaultName $VaultName
+            Mock Get-CCPCredential -MockWith {
+                $Result = [PSCustomObject]@{ UserName = 'svc-ccp'; Content = 'ccp-pass'; Address = 'host1'; Name = 'admin' }
+                $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this.Content | ConvertTo-SecureString -AsPlainText -Force }
+                $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
+                return $Result
+            } -ModuleName $ExtensionModule.Name
+            $Secret = Get-Secret -Name 'admin' -VaultName $VaultName
             Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name
+            $Secret | Should -BeOfType System.Management.Automation.PSCredential
+            $Secret.UserName | Should -Be 'svc-ccp'
+            $Secret.GetNetworkCredential().Password | Should -Be 'ccp-pass'
         }
 
         AfterAll {
@@ -152,9 +160,28 @@ Describe 'Get-Secret' {
         }
 
         It 'invokes Get-AIMCredential' {
-            Mock Get-AIMCredential -MockWith {} -ModuleName $ExtensionModule.Name
-            Get-Secret -Name 'windowsAdmin01' -SafeName 'Windows' -VaultName $VaultName
+            Mock Get-AIMCredential -MockWith {
+                $Result = [PSCustomObject]@{ UserName = 'svc-aim'; Password = 'aim-pass'; Address = 'host2'; Name = 'windowsAdmin01' }
+                $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this.Password | ConvertTo-SecureString -AsPlainText -Force }
+                $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
+                return $Result
+            } -ModuleName $ExtensionModule.Name
+            $Secret = Get-Secret -Name 'windowsAdmin01' -SafeName 'Windows' -VaultName $VaultName
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name
+            $Secret | Should -BeOfType System.Management.Automation.PSCredential
+            $Secret.UserName | Should -Be 'svc-aim'
+            $Secret.GetNetworkCredential().Password | Should -Be 'aim-pass'
+        }
+
+        It 'always requests UserName so a PSCredential can be built' {
+            Mock Get-AIMCredential -MockWith {
+                $Result = [PSCustomObject]@{ UserName = 'svc-aim'; Password = 'aim-pass'; Address = 'host2'; Name = 'windowsAdmin01' }
+                $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this.Password | ConvertTo-SecureString -AsPlainText -Force }
+                $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
+                return $Result
+            } -ModuleName $ExtensionModule.Name
+            $null = Get-Secret -Name 'windowsAdmin01' -SafeName 'Windows' -VaultName $VaultName
+            Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name -ParameterFilter { $RequiredProps -contains 'UserName' }
         }
 
         AfterAll {

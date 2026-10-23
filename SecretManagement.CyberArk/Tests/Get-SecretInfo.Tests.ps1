@@ -51,9 +51,14 @@ Describe 'Get-SecretInfo' {
         }
 
         It 'invokes Get-CCPCredential' {
-            Mock Get-CCPCredential -MockWith {} -ModuleName $ExtensionModule.Name
-            Get-SecretInfo -Filter 'admin' -VaultName $VaultName
+            Mock Get-CCPCredential -MockWith {
+                [PSCustomObject]@{ UserName = 'svc-ccp'; Content = 'ccp-pass'; Address = 'host1'; Name = 'admin' }
+            } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName
             Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name
+            $Info.Type | Should -Be 'PSCredential'
+            $Info.Name | Should -Be 'admin'
+            $Info.Metadata.Keys | Should -Not -Contain 'Content'
         }
 
         AfterAll {
@@ -68,9 +73,14 @@ Describe 'Get-SecretInfo' {
         }
 
         It 'invokes Get-AIMCredential' {
-            Mock Get-AIMCredential -MockWith {} -ModuleName $ExtensionModule.Name
-            Get-SecretInfo -Filter 'admin' -VaultName $VaultName
+            Mock Get-AIMCredential -MockWith {
+                [PSCustomObject]@{ UserName = 'svc-aim'; Password = 'aim-pass'; Address = 'host2'; Name = 'admin' }
+            } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name
+            $Info.Type | Should -Be 'PSCredential'
+            $Info.Name | Should -Be 'admin'
+            $Info.Metadata.Keys | Should -Not -Contain 'Password'
         }
 
         AfterAll {
