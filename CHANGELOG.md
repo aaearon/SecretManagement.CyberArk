@@ -19,6 +19,7 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Added
 
+- `Set-Secret` (REST) accepts `-Metadata` with `SafeName`, `PlatformId`, `address` and `userName` (case-insensitive keys). Metadata overrides the vault parameters per key, so one vault can write to any safe/platform; other keys are ignored.
 - `Test-SecretVault` checks per `ConnectionType`: REST needs an active session; `CredentialProvider` needs `AppID` and `Get-AIMCredential`; `CentralCredentialProvider` needs `AppID`, `URL` and `Get-CCPCredential`.
 - `Get-SecretInfo` wildcard filtering for REST, and metadata including `createdTime` (UTC `DateTime`); `UserName` is always requested from the Credential Provider and included.
 - New `CentralCredentialProvider` vault parameters: `WebServiceName`, `ConnectionTimeout`, `Method`, `FailRequestOnPasswordChange`.
