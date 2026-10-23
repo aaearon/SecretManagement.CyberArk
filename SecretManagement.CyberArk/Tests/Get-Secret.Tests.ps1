@@ -108,6 +108,14 @@ Describe 'Get-Secret' {
             }
         }
 
+        It 'returns null and retrieves no password when the exact-name match is in a different safe than the vault safeName' {
+            Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1'; safeName = 'SafeB' } } -ModuleName $ExtensionModule.Name
+            Mock Get-PASAccountPassword -MockWith {} -ModuleName $ExtensionModule.Name
+
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ safeName = 'SafeA' }) | Should -BeNullOrEmpty
+            Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+        }
+
         It 'writes an error with the underlying message when retrieving the password fails' {
             Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1' } } -ModuleName $ExtensionModule.Name
             Mock Get-PASAccountPassword -MockWith { throw 'access denied by policy' } -ModuleName $ExtensionModule.Name

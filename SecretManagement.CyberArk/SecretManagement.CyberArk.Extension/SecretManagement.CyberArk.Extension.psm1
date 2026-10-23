@@ -33,10 +33,11 @@ function Get-Secret {
                 $GetPASAccountParameters = @{
                     search = $Name
                 }
-                if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add('safeName', $AdditionalParameters.safeName) }
+                $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
+                if ($VaultSafe) { $GetPASAccountParameters.Add('safeName', $VaultSafe) }
 
                 try {
-                    $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -eq $Name })
+                    $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -eq $Name } | Select-AccountInVaultSafe -SafeName $VaultSafe)
                 } catch {
                     Write-Error "Failed to look up account '$Name': $($_.Exception.Message)"
                     return
@@ -139,7 +140,9 @@ function Get-SecretInfo {
             $SearchText = [regex]::Split($Filter, '[*?\[\]]') | Sort-Object -Property Length -Descending | Select-Object -First 1
             $GetPASAccountParameters = @{}
             if ($SearchText) { $GetPASAccountParameters.search = $SearchText }
-            $results = Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -like $Filter }
+            $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
+            if ($VaultSafe) { $GetPASAccountParameters.safeName = $VaultSafe }
+            $results = Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -like $Filter } | Select-AccountInVaultSafe -SafeName $VaultSafe
         }
         Default {
             Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
@@ -209,7 +212,10 @@ function Remove-Secret {
         'REST' {
             if (-not (Test-PASSession)) { return }
 
-            $results = @(Get-PASAccount -search "$Name" | Where-Object { $PSItem.name -eq $Name })
+            $GetPASAccountParameters = @{ search = "$Name" }
+            $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
+            if ($VaultSafe) { $GetPASAccountParameters.safeName = $VaultSafe }
+            $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $PSItem.name -eq $Name } | Select-AccountInVaultSafe -SafeName $VaultSafe)
 
             if ($results.Count -eq 0) {
                 Write-Error "No account found with name $Name. Not deleting anything."
@@ -284,6 +290,14 @@ function Set-Secret {
             Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
             return
         }
+    }
+}
+
+function Select-AccountInVaultSafe {
+    # Enforces the vault's SafeName scope client-side too, so it holds even if the server-side filter does not.
+    param ([Parameter(ValueFromPipeline)] $Account, [string] $SafeName)
+    process {
+        if ([string]::IsNullOrEmpty($SafeName) -or $Account.safeName -ieq $SafeName) { $Account }
     }
 }
 

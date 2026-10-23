@@ -64,6 +64,31 @@ Describe 'Remove-Secret' {
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
 
+        It 'does not remove an exact-name match that lives in a different safe than the vault safeName' {
+            Mock Get-PASAccount -MockWith {
+                [PSCustomObject]@{ name = 'localAdmin01'; userName = 'u'; Id = '9'; safeName = 'SafeB' }
+            } -ModuleName $ExtensionModule.Name
+            Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
+
+            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ SafeName = 'SafeA' }) -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*No account found*Not deleting anything*'
+            Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+        }
+
+        It 'passes the vault safeName to Get-PASAccount and removes the match in that safe, ignoring case' {
+            Mock Get-PASAccount -MockWith {
+                @(
+                    [PSCustomObject]@{ name = 'localAdmin01'; userName = 'u'; Id = '9'; safeName = 'SafeB' },
+                    [PSCustomObject]@{ name = 'localAdmin01'; userName = 'u'; Id = '8'; safeName = 'safea' }
+                )
+            } -ModuleName $ExtensionModule.Name
+            Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
+
+            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ SafeName = 'SafeA' })
+            Should -Invoke -CommandName Get-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $safeName -eq 'SafeA' }
+            Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $id -eq '8' }
+        }
+
         It 'removes only the exactly matching account, ignoring case' {
             Mock Get-PASAccount -MockWith {
                 @(

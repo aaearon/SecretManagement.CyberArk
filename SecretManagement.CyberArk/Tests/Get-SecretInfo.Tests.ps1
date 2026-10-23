@@ -58,6 +58,18 @@ Describe 'Get-SecretInfo' {
             "$($Info.Metadata.Values)" | Should -Not -BeLike '*sekrit*'
         }
 
+        It 'scopes results to the vault safeName' {
+            Mock Get-PASAccount -MockWith {
+                @(
+                    [PSCustomObject]@{ id = '1'; name = 'acctA'; safeName = 'SafeA' },
+                    [PSCustomObject]@{ id = '2'; name = 'acctB'; safeName = 'SafeB' }
+                )
+            } -ModuleName $ExtensionModule.Name
+            $Info = @(Get-SecretInfo -Filter '*' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ SafeName = 'safea' }))
+            $Info.Name | Should -Be 'acctA'
+            Should -Invoke -CommandName Get-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $safeName -eq 'safea' }
+        }
+
         Context 'wildcard filtering' {
             BeforeEach {
                 Mock Get-PASAccount -MockWith {
