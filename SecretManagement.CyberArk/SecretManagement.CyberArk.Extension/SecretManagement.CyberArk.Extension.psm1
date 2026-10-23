@@ -5,13 +5,11 @@ function Get-Secret {
         [string] $VaultName,
         [hashtable] $AdditionalParameters,
         [Parameter(ValueFromPipeline = $true)]
-        [object] $PASAccount,
-        [string] $SafeName
+        [object] $PASAccount
     )
 
     switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
-            if ($null -eq $SafeName) { Write-Error 'SafeName is required for the Credential Provider type'; return }
             $Credential = Invoke-GetAIMCredential -Name $Name -AdditionalParameters $AdditionalParameters
             if ($null -ne $Credential) { $Credential = $Credential.ToCredential() }
         }
@@ -322,7 +320,6 @@ function Invoke-GetAIMCredential {
     [CmdletBinding()]
     param (
         [string] $Name,
-        [string] $SafeName,
         [hashtable] $AdditionalParameters
     )
 
@@ -332,7 +329,8 @@ function Invoke-GetAIMCredential {
         AppID    = $AdditionalParameters.AppID
         UserName = $Name
     }
-    if ($SafeName) { $GetAIMCredentialParameters.Add('SafeName', $SafeName) }
+    # Optional vault-level scope; Get-AIMCredential's parameter is named Safe
+    if ($AdditionalParameters.SafeName) { $GetAIMCredentialParameters.Add('Safe', $AdditionalParameters.SafeName) }
     # UserName is always requested so a PSCredential can be built
     $RequiredProps = @($AdditionalParameters.RequiredProps) + 'UserName' | Where-Object { $_ } | Select-Object -Unique
     $GetAIMCredentialParameters.Add('RequiredProps', $RequiredProps)

@@ -30,6 +30,8 @@ All options are read from the `VaultParameters` given at registration. `Get-Secr
 
 Specify `CredentialProvider` as the `ConnectionType`, the `AppID` to authenticate as, and optionally a `ClientPath` to the Credential Provider executable (otherwise it will use the existing `ClientPath` previously set via `Set-AIMConfiguration`.)
 
+`SafeName` is optional: when set, every lookup on that vault is scoped to that safe (passed to `Get-AIMCredential` as `-Safe`). Without it the lookup is by object name only, so it must be unique across the safes `AppID` can see.
+
 ```powershell
 $VaultParameters = @{
     ConnectionType = 'CredentialProvider'

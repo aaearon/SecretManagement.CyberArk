@@ -164,6 +164,14 @@ Describe 'Get-SecretInfo' {
             $Info.Metadata.Keys | Should -Not -Contain 'Password'
         }
 
+        It 'passes the SafeName vault parameter to Get-AIMCredential as Safe' {
+            Mock Get-AIMCredential -MockWith {
+                [PSCustomObject]@{ UserName = 'svc-aim'; Name = 'admin' }
+            } -ModuleName $ExtensionModule.Name
+            $null = Get-SecretInfo -Filter 'admin' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{SafeName = 'Windows' })
+            Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $Safe -eq 'Windows' }
+        }
+
         It 'returns only allowed metadata keys with allowed types' {
             Mock Get-AIMCredential -MockWith {
                 [PSCustomObject]@{ Password = 'sekrit'; Name = 'admin'; UserName = 'svc'; Address = 'host'; Safe = 'S'; Folder = 'Root'; PolicyID = 'Pol'; DeviceType = 'Operating System'
