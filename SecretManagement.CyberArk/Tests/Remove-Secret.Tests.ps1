@@ -15,11 +15,13 @@
 }
 
 AfterAll {
+    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     Remove-Module $ExtensionModule -Force
 }
 Describe 'Remove-Secret' {
     Context 'when connection type is REST' {
         BeforeAll {
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
@@ -78,6 +80,7 @@ Describe 'Remove-Secret' {
 
     Context 'when connection type is Credential Provider' {
         It 'throws an error' {
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider' }
             { Remove-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw 'Remove-Secret is not supported for Credential Provider'
             Unregister-SecretVault -Name $VaultName
@@ -86,6 +89,7 @@ Describe 'Remove-Secret' {
 
     Context 'when connection type is Central Credential Provider' {
         It 'throws an error' {
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider' }
             { Remove-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw 'Remove-Secret is not supported for Central Credential Provider'
             Unregister-SecretVault -Name $VaultName

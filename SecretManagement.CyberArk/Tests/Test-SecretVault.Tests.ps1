@@ -8,11 +8,13 @@ BeforeAll {
 }
 
 AfterAll {
+    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     Remove-Module $ExtensionModule -Force
 }
 Describe 'Test-SecretVault' {
     Context 'when connection type is REST' {
         BeforeAll {
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
         }
 
@@ -40,6 +42,7 @@ Describe 'Test-SecretVault' {
         It 'returns true when AppID is set and Get-AIMCredential is available' {
             Mock Get-Command -MockWith { [PSCustomObject]@{ Name = 'Get-AIMCredential' } } -ModuleName $ExtensionModule.Name
             Mock Test-PASSession -MockWith {} -ModuleName $ExtensionModule.Name
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider'; AppID = 'App' }
             Test-SecretVault -VaultName $VaultName | Should -BeTrue
             Should -Invoke -CommandName Test-PASSession -ModuleName $ExtensionModule.Name -Times 0 -Exactly
@@ -48,6 +51,7 @@ Describe 'Test-SecretVault' {
 
         It 'returns false when AppID is missing' {
             Mock Get-Command -MockWith { [PSCustomObject]@{ Name = 'Get-AIMCredential' } } -ModuleName $ExtensionModule.Name
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider' }
             Test-SecretVault -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeFalse
             "$Err" | Should -BeLike '*AppID*'
@@ -56,6 +60,7 @@ Describe 'Test-SecretVault' {
 
         It 'returns false when Get-AIMCredential is unavailable' {
             Mock Get-Command -MockWith { $null } -ModuleName $ExtensionModule.Name
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider'; AppID = 'App' }
             Test-SecretVault -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeFalse
             "$Err" | Should -BeLike '*Get-AIMCredential*'
@@ -66,6 +71,7 @@ Describe 'Test-SecretVault' {
     Context 'when connection type is Central Credential Provider' {
         It 'returns true when AppID and URL are set and Get-CCPCredential is available' {
             Mock Get-Command -MockWith { [PSCustomObject]@{ Name = 'Get-CCPCredential' } } -ModuleName $ExtensionModule.Name
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider'; AppID = 'App'; URL = 'https://ccp' }
             Test-SecretVault -VaultName $VaultName | Should -BeTrue
             Unregister-SecretVault -Name $VaultName
@@ -73,6 +79,7 @@ Describe 'Test-SecretVault' {
 
         It 'returns false when URL is missing' {
             Mock Get-Command -MockWith { [PSCustomObject]@{ Name = 'Get-CCPCredential' } } -ModuleName $ExtensionModule.Name
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider'; AppID = 'App' }
             Test-SecretVault -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeFalse
             "$Err" | Should -BeLike '*URL*'
@@ -81,6 +88,7 @@ Describe 'Test-SecretVault' {
 
         It 'returns false when Get-CCPCredential is unavailable' {
             Mock Get-Command -MockWith { $null } -ModuleName $ExtensionModule.Name
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider'; AppID = 'App'; URL = 'https://ccp' }
             Test-SecretVault -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeFalse
             "$Err" | Should -BeLike '*Get-CCPCredential*'
@@ -90,6 +98,7 @@ Describe 'Test-SecretVault' {
 
     Context 'when connection type is unknown' {
         It 'returns false' {
+            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'Bogus' }
             Test-SecretVault -VaultName $VaultName -ErrorAction SilentlyContinue | Should -BeFalse
             Unregister-SecretVault -Name $VaultName
