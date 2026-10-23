@@ -12,7 +12,7 @@
     # RootModule = 'SecretManagement.CyberArk.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.0.2'
+    ModuleVersion     = '2.0.0'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -24,7 +24,7 @@
     Author            = 'Tim Schindler'
 
     # Company or vendor of this module
-    CompanyName       = 'Unknown'
+    CompanyName       = 'Tim Schindler'
 
     # Copyright statement for this module
     Copyright         = '(c) Tim Schindler. All rights reserved.'
@@ -52,11 +52,17 @@
 
     # Modules that must be imported into the global environment prior to importing this module
     RequiredModules   = @(
-        'psPAS',
-        'CredentialRetriever',
         @{
-            ModuleName    = 'Microsoft.Powershell.SecretManagement'
-            ModuleVersion = '1.0.0'
+            ModuleName    = 'psPAS'
+            ModuleVersion = '7.0.242'
+        },
+        @{
+            ModuleName    = 'CredentialRetriever'
+            ModuleVersion = '4.0.0'
+        },
+        @{
+            ModuleName    = 'Microsoft.PowerShell.SecretManagement'
+            ModuleVersion = '1.1.2'
         }
     )
 
