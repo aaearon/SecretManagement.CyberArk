@@ -190,6 +190,16 @@ Describe 'Get-SecretInfo' {
             "$Err" | Should -BeLike '*admin*aim exploded*'
         }
 
+        It 'reports the name it was looked up by (UserName) so the name round-trips into Get-Secret' {
+            Mock Get-AIMCredential -MockWith {
+                [PSCustomObject]@{ UserName = 'svc-aim'; Name = 'Operating System-WinDomain-host-svc-aim'; Password = 'x' }
+            } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'svc-aim' -VaultName $VaultName -AdditionalParameters $VaultParams
+            $Info.Name | Should -Be 'svc-aim'
+            $null = Get-Secret -Name $Info.Name -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue
+            Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name -Times 2 -Exactly -ParameterFilter { $UserName -eq 'svc-aim' }
+        }
+
         It 'passes the SafeName vault parameter to Get-AIMCredential as Safe' {
             Mock Get-AIMCredential -MockWith {
                 [PSCustomObject]@{ UserName = 'svc-aim'; Name = 'admin' }

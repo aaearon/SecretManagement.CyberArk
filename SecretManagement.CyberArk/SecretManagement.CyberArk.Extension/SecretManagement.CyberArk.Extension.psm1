@@ -127,6 +127,8 @@ function Get-SecretInfo {
             }
             $Keys = $ProviderKeys
             if ($_ -eq 'CredentialProvider') {
+                # Get-Secret looks up by UserName, so report that name (not the object Name) to keep it round-trippable
+                $ReportLookupName = $true
                 $results = Invoke-GetAIMCredential -Name $Filter -AdditionalParameters $AdditionalParameters
             } else {
                 $results = Invoke-GetCCPCredential -Name $Filter -AdditionalParameters $AdditionalParameters
@@ -161,7 +163,7 @@ function Get-SecretInfo {
             if ($null -ne $Value) { $Metadata[$Key] = $Value }
         }
 
-        $SecretName = if ($Account.name) { "$($Account.name)" } else { $Filter }
+        $SecretName = if ($ReportLookupName -or -not $Account.name) { $Filter } else { "$($Account.name)" }
         $SecretInfo = [Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
             $SecretName, # Name of secret
             $SecretDataType, # Secret data type [Microsoft.PowerShell.SecretManagement.SecretType]
