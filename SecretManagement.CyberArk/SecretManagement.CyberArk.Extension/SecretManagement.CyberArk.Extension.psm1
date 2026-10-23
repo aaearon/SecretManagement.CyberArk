@@ -185,9 +185,17 @@ function ConvertTo-SecretMetadataValue {
     param ([string] $Key, $Value)
 
     if ($null -eq $Value) { return $null }
-    if ($Key -eq 'createdTime' -and $Value -is [ValueType] -and $Value -isnot [datetime]) {
-        # psPAS leaves REST times as Unix epoch seconds
-        return [DateTimeOffset]::FromUnixTimeSeconds([long]$Value).UtcDateTime
+    if ($Key -eq 'createdTime' -and $Value -isnot [datetime]) {
+        # psPAS leaves REST times as Unix epoch seconds (milliseconds above 1e11); anything else is dropped, never thrown on
+        if ($Value -isnot [int] -and $Value -isnot [long] -and $Value -isnot [double] -and $Value -isnot [decimal]) { return $null }
+        try {
+            if ([math]::Abs([double]$Value) -gt 1e11) {
+                return [DateTimeOffset]::FromUnixTimeMilliseconds([long]$Value).UtcDateTime
+            }
+            return [DateTimeOffset]::FromUnixTimeSeconds([long]$Value).UtcDateTime
+        } catch {
+            return $null
+        }
     }
     if ($Value -is [string] -or $Value -is [datetime]) { return $Value }
     if ($Value -is [int]) { return $Value }

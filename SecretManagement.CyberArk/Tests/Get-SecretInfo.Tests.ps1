@@ -70,6 +70,22 @@ Describe 'Get-SecretInfo' {
             Should -Invoke -CommandName Get-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $safeName -eq 'safea' }
         }
 
+        It 'converts createdTime given in milliseconds' {
+            Mock Get-PASAccount -MockWith { [PSCustomObject]@{ id = '7'; name = 'acct'; createdTime = 1700000000000 } } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'acct' -VaultName $VaultName -AdditionalParameters $VaultParams
+            $Info.Metadata['createdTime'] | Should -Be ([datetime]::new(2023, 11, 14, 22, 13, 20, [DateTimeKind]::Utc))
+        }
+
+        It 'drops an out-of-range or invalid createdTime without throwing' -ForEach @(
+            @{ Value = 9000000000000000000L }, @{ Value = -9000000000000000000L }, @{ Value = [double]::MaxValue }, @{ Value = 'not-a-time' }, @{ Value = $true }
+        ) {
+            $global:CreatedTimeValue = $Value
+            Mock Get-PASAccount -MockWith { [PSCustomObject]@{ id = '7'; name = 'acct'; createdTime = $global:CreatedTimeValue } } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'acct' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction Stop
+            $Info.Name | Should -Be 'acct'
+            $Info.Metadata.Keys | Should -Not -Contain 'createdTime'
+        }
+
         Context 'wildcard filtering' {
             BeforeEach {
                 Mock Get-PASAccount -MockWith {
