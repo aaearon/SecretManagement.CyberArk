@@ -79,7 +79,7 @@ Register-SecretVault -Name CyberArk -ModuleName SecretManagement.CyberArk -Vault
 Optional REST vault parameters:
 
 - `Get-Secret`: `safeName` (limits the account search), and the password retrieval options `Reason`, `TicketingSystem`, `TicketId`, `Version`, `ActionType`, `isUse`, `Machine`. They apply to every `Get-Secret` call on that vault, e.g. register a dedicated vault with `Reason = 'To do things'` if policy requires a reason.
-- `Set-Secret`: `SafeName` and `PlatformId` (required), `userName` and `address`.
+- `Set-Secret`: optional defaults `SafeName`, `PlatformId`, `userName` and `address`; `-Metadata` on each call overrides them (see Set-Secret below).
 
 ## Usage
 
@@ -103,20 +103,19 @@ Get-PASAccount -search localAdmin01 -safeName Windows | Get-Secret -VaultName Cy
 
 ### Set-Secret
 
-REST only. `SafeName` and `PlatformId` come from the vault's `VaultParameters` (see above); `userName` and `address` are optional there too.
+REST only. Pass the target as `-Metadata`; keys are case-insensitive. `SafeName` and `PlatformId` are required, `address` and `userName` optional. Any `VaultParameters` with the same names act as defaults: a non-empty Metadata value wins per key, otherwise the vault parameter is used. Other Metadata keys are ignored. If `SafeName` or `PlatformId` is missing from both, an error is written and nothing is created.
 
 ```powershell
-Register-SecretVault -Name CyberArkWindows -ModuleName SecretManagement.CyberArk -VaultParameters @{
-    ConnectionType = 'REST'
-    SafeName       = 'Windows'
-    PlatformId     = 'WindowsDomainAccount'
-    address        = 'iosharp.lab'
-    userName       = 'localAdmin10'
-}
-
 $Secret = ConvertTo-SecureString 'verySecret!' -AsPlainText -Force
-Set-Secret -VaultName CyberArkWindows -Secret $Secret
+Set-Secret -Vault CyberArk -Name localAdmin10 -Secret $Secret -Metadata @{
+    SafeName   = 'Windows'
+    PlatformId = 'WindowsDomainAccount'
+    address    = 'iosharp.lab'
+    userName   = 'localAdmin10'
+}
 ```
+
+One vault can therefore serve any safe/platform. To avoid repeating values, register defaults (`SafeName`, `PlatformId`, `address`, `userName`) in the `VaultParameters` and override per call with `-Metadata`.
 
 The value passed to `-Name` is used as the `name` property of the account in CyberArk. Omit `-Name` to have CyberArk generate the name.
 

@@ -203,7 +203,8 @@ function Set-Secret {
         [string] $Name,
         [object] $Secret,
         [string] $VaultName,
-        [hashtable] $AdditionalParameters
+        [hashtable] $AdditionalParameters,
+        [hashtable] $Metadata
     )
 
     switch ($AdditionalParameters.ConnectionType) {
@@ -216,20 +217,34 @@ function Set-Secret {
             return
         }
         'REST' {
-            if ($null -eq $AdditionalParameters.SafeName -or $null -eq $AdditionalParameters.PlatformId) {
-                Write-Error 'SafeName and PlatformId are required keys in $AdditionalParameters'
+            $Known = 'SafeName', 'PlatformId', 'address', 'userName'
+            $Resolved = @{}
+            foreach ($Key in $Known) {
+                $Value = Get-CaseInsensitiveValue -Table $Metadata -Key $Key
+                if ($null -eq $Value) { $Value = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key $Key }
+                if ($null -ne $Value) { $Resolved[$Key] = $Value }
+            }
+
+            $Unknown = @($Metadata.Keys | Where-Object { $_ -notin $Known })
+            if ($Unknown) {
+                Write-Verbose "Ignoring unsupported Metadata keys: $($Unknown -join ', ')" -Verbose:($AdditionalParameters.Verbose -eq $true -or $VerbosePreference -eq 'Continue')
+            }
+
+            $Missing = @('SafeName', 'PlatformId' | Where-Object { -not $Resolved.ContainsKey($_) })
+            if ($Missing) {
+                Write-Error "SafeName and PlatformId are required (via -Metadata or VaultParameters); missing: $($Missing -join ', ')"
                 return
             }
 
             if (-not (Test-PASSession)) { return }
 
             $AddPASAccountParameters = @{
-                SafeName   = $AdditionalParameters.SafeName
-                PlatformId = $AdditionalParameters.PlatformId
+                SafeName   = $Resolved.SafeName
+                PlatformId = $Resolved.PlatformId
             }
             if ($Name) { $AddPASAccountParameters.Add('name', $Name) }
-            if ($AdditionalParameters.userName) { $AddPASAccountParameters.Add('userName', $AdditionalParameters.userName) }
-            if ($AdditionalParameters.address) { $AddPASAccountParameters.Add('address', $AdditionalParameters.address) }
+            if ($Resolved.ContainsKey('userName')) { $AddPASAccountParameters.Add('userName', $Resolved.userName) }
+            if ($Resolved.ContainsKey('address')) { $AddPASAccountParameters.Add('address', $Resolved.address) }
             if ($Secret) { $AddPASAccountParameters.Add('secret', $Secret) }
 
             Add-PASAccount @AddPASAccountParameters
@@ -239,6 +254,15 @@ function Set-Secret {
             return
         }
     }
+}
+
+function Get-CaseInsensitiveValue {
+    # Returns the first non-empty value whose key equals $Key ignoring case, else $null.
+    param ([hashtable] $Table, [string] $Key)
+    foreach ($K in $Table.Keys) {
+        if ($K -ieq $Key -and -not [string]::IsNullOrEmpty("$($Table[$K])")) { return $Table[$K] }
+    }
+    return $null
 }
 
 function Test-SecretVault {
