@@ -81,7 +81,7 @@ or
 Get-PASAccount -search localAdmin01 -safeName Windows | Get-Secret -VaultName CyberArk
 ```
 
-Note: If multiple results are returned from CyberArk the first one is provided.
+Note: `Get-Secret` only considers accounts whose `name` exactly matches `-Name` (case-insensitive). If none match, nothing is returned; if more than one matches, it throws and no password is retrieved.
 
 To retrieve the password for an account named `linuxAdmin01` where policy requires a reason:
 
