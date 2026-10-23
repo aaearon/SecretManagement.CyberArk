@@ -28,8 +28,9 @@ jobs:
           Install-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement -Force
           Import-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement -Force
       - name: Publish Module to PowerShell Gallery
-        uses: pcgeek86/publish-powershell-module-action@7c0bb5c0041e699d64298cf22b1e27e5cf9a5f73 # v20
-        id: publish-module
-        with:
-          modulePath: SecretManagement.CyberArk
-          NuGetApiKey: ${{ secrets.PS_GALLERY_KEY }}
+        shell: pwsh
+        env:
+          PS_GALLERY_KEY: ${{ secrets.PS_GALLERY_KEY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Publish-Module -Path SecretManagement.CyberArk -NuGetApiKey $env:PS_GALLERY_KEY -Verbose
