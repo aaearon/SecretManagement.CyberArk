@@ -81,22 +81,36 @@ function Get-SecretInfo {
         [hashtable] $AdditionalParameters
     )
 
+    if ([string]::IsNullOrEmpty($Filter)) { $Filter = '*' }
+    $VerboseOn = [bool]$AdditionalParameters.Verbose
+
+    # Non-secret, useful fields only. Anything else (secrets, nested objects) is never copied into metadata.
+    $ProviderKeys = @('Name', 'UserName', 'Address', 'Safe', 'Folder', 'PolicyID', 'DeviceType')
+    $RestKeys = @('id', 'name', 'userName', 'address', 'safeName', 'platformId', 'secretType', 'createdTime')
+    $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
+
     switch ($AdditionalParameters.ConnectionType) {
-        'CredentialProvider' {
-            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
-            $results = Invoke-GetAIMCredential -Name $Filter -AdditionalParameters $AdditionalParameters
-            $results = $results | Select-Object -Property * -ExcludeProperty Password
-        }
-        'CentralCredentialProvider' {
-            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
-            $results = Invoke-GetCCPCredential -Name $Filter -AdditionalParameters $AdditionalParameters
-            $results = $results | Select-Object -Property * -ExcludeProperty Content
+        { $_ -in 'CredentialProvider', 'CentralCredentialProvider' } {
+            if ([WildcardPattern]::ContainsWildcardCharacters($Filter)) {
+                Write-Verbose "$($AdditionalParameters.ConnectionType) cannot enumerate secrets, so wildcard filter '$Filter' returns nothing. Specify the exact object name." -Verbose:$VerboseOn
+                return
+            }
+            $Keys = $ProviderKeys
+            if ($_ -eq 'CredentialProvider') {
+                $results = Invoke-GetAIMCredential -Name $Filter -AdditionalParameters $AdditionalParameters
+            } else {
+                $results = Invoke-GetCCPCredential -Name $Filter -AdditionalParameters $AdditionalParameters
+            }
         }
         'REST' {
-            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
             if (-not (Test-PASSession)) { return }
+            $Keys = $RestKeys
 
-            $results = Get-PASAccount -search "$Filter"
+            # Search with the longest non-wildcard fragment, then apply the real wildcard match locally.
+            $SearchText = [regex]::Split($Filter, '[*?\[\]]') | Sort-Object -Property Length -Descending | Select-Object -First 1
+            $GetPASAccountParameters = @{}
+            if ($SearchText) { $GetPASAccountParameters.search = $SearchText }
+            $results = Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -like $Filter }
         }
         Default {
             Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
@@ -108,10 +122,16 @@ function Get-SecretInfo {
 
     foreach ($Account in $results) {
         $Metadata = [Ordered]@{}
-        $Account.psobject.properties | ForEach-Object { $Metadata[$PSItem.Name] = $PSItem.Value }
+        foreach ($Key in $Keys) {
+            $Property = $Account.psobject.Properties[$Key]
+            if ($null -eq $Property) { continue }
+            $Value = ConvertTo-SecretMetadataValue -Key $Key -Value $Property.Value
+            if ($null -ne $Value) { $Metadata[$Key] = $Value }
+        }
 
+        $SecretName = if ($Account.name) { "$($Account.name)" } else { $Filter }
         $SecretInfo = [Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
-            "$($Account.name)", # Name of secret
+            $SecretName, # Name of secret
             $SecretDataType, # Secret data type [Microsoft.PowerShell.SecretManagement.SecretType]
             $VaultName, # Name of vault
             $Metadata)  # Optional Metadata parameter)
@@ -120,6 +140,24 @@ function Get-SecretInfo {
     }
 
     return $Secrets
+}
+
+function ConvertTo-SecretMetadataValue {
+    # SecretManagement metadata supports string, int and DateTime only.
+    param ([string] $Key, $Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Key -eq 'createdTime' -and $Value -is [ValueType] -and $Value -isnot [datetime]) {
+        # psPAS leaves REST times as Unix epoch seconds
+        return [DateTimeOffset]::FromUnixTimeSeconds([long]$Value).UtcDateTime
+    }
+    if ($Value -is [string] -or $Value -is [datetime]) { return $Value }
+    if ($Value -is [int]) { return $Value }
+    if ($Value -is [long] -or $Value -is [int16] -or $Value -is [byte]) {
+        if ($Value -ge [int]::MinValue -and $Value -le [int]::MaxValue) { return [int]$Value }
+        return "$Value"
+    }
+    return $null
 }
 
 function Remove-Secret {
