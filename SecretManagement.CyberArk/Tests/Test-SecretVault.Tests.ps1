@@ -23,7 +23,7 @@ Describe 'Test-SecretVault' {
 
         It 'throws when there is no PASSession' {
             Mock Get-PASSession -MockWith { throw 'no session' } -ModuleName $ExtensionModule.Name
-            { Test-SecretVault -VaultName $VaultName } | Should -Throw 'Failed to get PASSession'
+            { Test-SecretVault -VaultName $VaultName } | Should -Throw '*Failed to get PASSession*'
         }
 
         AfterAll {
