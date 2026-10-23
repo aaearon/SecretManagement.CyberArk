@@ -23,14 +23,16 @@ Describe 'Test-SecretVault' {
             Test-SecretVault -VaultName $VaultName | Should -BeTrue
         }
 
-        It 'throws when Get-PASSession returns an empty session object' {
+        It 'returns false with an error when Get-PASSession returns an empty session object' {
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = $null } } -ModuleName $ExtensionModule.Name
-            { Test-SecretVault -VaultName $VaultName } | Should -Throw '*Failed to get PASSession*'
+            Test-SecretVault -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeFalse
+            "$Err" | Should -BeLike '*Failed to get PASSession*'
         }
 
-        It 'throws when there is no PASSession' {
+        It 'returns false with an error when there is no PASSession' {
             Mock Get-PASSession -MockWith { throw 'no session' } -ModuleName $ExtensionModule.Name
-            { Test-SecretVault -VaultName $VaultName } | Should -Throw '*Failed to get PASSession*'
+            Test-SecretVault -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeFalse
+            "$Err" | Should -BeLike '*Failed to get PASSession*'
         }
 
         AfterAll {

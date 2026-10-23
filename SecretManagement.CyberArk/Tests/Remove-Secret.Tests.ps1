@@ -26,7 +26,7 @@ Describe 'Remove-Secret' {
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
-        It 'throws and does not remove when only substring matches are found' {
+        It 'errors and does not remove when only substring matches are found' {
             Mock Get-PASAccount -MockWith {
                 @(
                     [PSCustomObject]@{ name = 'localAdmin01'; userName = 'localAdmin01'; Id = '1' },
@@ -35,19 +35,21 @@ Describe 'Remove-Secret' {
             } -ModuleName $ExtensionModule.Name
             Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            { Remove-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw
+            Remove-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*Not deleting anything*'
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
 
-        It 'throws and does not remove when no accounts are found' {
+        It 'errors and does not remove when no accounts are found' {
             Mock Get-PASAccount -MockWith { $null } -ModuleName $ExtensionModule.Name
             Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            { Remove-Secret -Name 'localAdmin01' -VaultName $VaultName } | Should -Throw
+            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*No account found*Not deleting anything*'
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
 
-        It 'throws and does not remove when more than one exact match is found' {
+        It 'errors and does not remove when more than one exact match is found' {
             Mock Get-PASAccount -MockWith {
                 @(
                     [PSCustomObject]@{ name = 'localAdmin01'; userName = 'a'; Id = '1' },
@@ -56,7 +58,8 @@ Describe 'Remove-Secret' {
             } -ModuleName $ExtensionModule.Name
             Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            { Remove-Secret -Name 'localAdmin01' -VaultName $VaultName } | Should -Throw
+            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*Multiple accounts*Not deleting anything*'
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
 
@@ -79,19 +82,21 @@ Describe 'Remove-Secret' {
     }
 
     Context 'when connection type is Credential Provider' {
-        It 'throws an error' {
+        It 'writes an error' {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider' }
-            { Remove-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw 'Remove-Secret is not supported for Credential Provider'
+            Remove-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*Remove-Secret is not supported for Credential Provider*'
             Unregister-SecretVault -Name $VaultName
         }
     }
 
     Context 'when connection type is Central Credential Provider' {
-        It 'throws an error' {
+        It 'writes an error' {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider' }
-            { Remove-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw 'Remove-Secret is not supported for Central Credential Provider'
+            Remove-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*Remove-Secret is not supported for Central Credential Provider*'
             Unregister-SecretVault -Name $VaultName
         }
     }
