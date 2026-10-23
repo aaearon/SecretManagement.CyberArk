@@ -42,6 +42,7 @@ All notable changes to this project are documented here. The format is based on 
 - Provider results without a `UserName` or with an empty password write an error naming the missing field instead of failing in `ToCredential()`.
 - `CentralCredentialProvider` switch vault parameters set to false (notably `UseDefaultCredentials`) are no longer passed, which previously enabled OS credentials.
 - The `safeName` vault parameter now also scopes `Remove-Secret` and REST `Get-SecretInfo`, and is enforced client-side for `Get-Secret`.
+- REST `Get-SecretInfo` and `Remove-Secret` lookup failures (and `Remove-PASAccount` failures) are written as errors instead of escaping; a direct `-PASAccount` to `Get-Secret` is checked against the vault `safeName` before the password is fetched.
 - `Set-Secret` accepts a `PSCredential` (as returned by `Get-Secret`) or a string as well as a `SecureString`.
 - `CredentialProvider` `Get-SecretInfo` reports the looked-up `UserName` as the entry name so it round-trips into `Get-Secret`.
 - REST `Get-SecretInfo` wildcard filters with `[` classes or backtick escapes no longer miss matches; `createdTime` in milliseconds is converted and invalid values are dropped.
