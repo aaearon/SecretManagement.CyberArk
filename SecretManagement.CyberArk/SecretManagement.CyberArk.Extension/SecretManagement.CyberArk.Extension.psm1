@@ -140,13 +140,15 @@ function Remove-Secret {
         'REST' {
             Test-PASSession
 
-            $results = Get-PASAccount -search "$Name"
+            $results = @(Get-PASAccount -search "$Name" | Where-Object { $PSItem.name -eq $Name })
 
-            if ($results.Count -gt 1) {
-                Write-Error "Multiple matches found with name $Name. Not deleting anything."
-            } else {
-                $results | Remove-PASAccount
+            if ($results.Count -eq 0) {
+                throw "No account found with name $Name. Not deleting anything."
+            } elseif ($results.Count -gt 1) {
+                throw "Multiple accounts found with name $Name. Not deleting anything."
             }
+
+            Remove-PASAccount -id $results[0].Id
         }
         Default {
             throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
@@ -205,13 +207,34 @@ function Test-SecretVault {
         [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
-    return $true
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
+
+    switch ($VaultParameters.ConnectionType) {
+        'CredentialProvider' {
+            if (-not $VaultParameters.AppID) { Write-Error 'CredentialProvider vault parameter AppID is missing'; return $false }
+            if (-not (Get-Command -Name Get-AIMCredential -ErrorAction SilentlyContinue)) { Write-Error 'Get-AIMCredential command not found'; return $false }
+            return $true
+        }
+        'CentralCredentialProvider' {
+            if (-not $VaultParameters.AppID) { Write-Error 'CentralCredentialProvider vault parameter AppID is missing'; return $false }
+            if (-not $VaultParameters.URL) { Write-Error 'CentralCredentialProvider vault parameter URL is missing'; return $false }
+            if (-not (Get-Command -Name Get-CCPCredential -ErrorAction SilentlyContinue)) { Write-Error 'Get-CCPCredential command not found'; return $false }
+            return $true
+        }
+        'REST' {
+            Test-PASSession
+            return $true
+        }
+        Default {
+            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            return $false
+        }
+    }
 }
 
 function Test-PASSession {
     try {
-        $null = Get-PASSession
+        if (-not (Get-PASSession).BaseURI) { throw 'No active session' }
     } catch {
         throw 'Failed to get PASSession. Run New-PASSession again.'
     }
