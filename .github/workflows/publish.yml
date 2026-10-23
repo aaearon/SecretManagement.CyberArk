@@ -33,4 +33,4 @@ jobs:
           PS_GALLERY_KEY: ${{ secrets.PS_GALLERY_KEY }}
         run: |
           $ErrorActionPreference = 'Stop'
-          Publish-Module -Path SecretManagement.CyberArk -NuGetApiKey $env:PS_GALLERY_KEY -Verbose
+          Publish-Module -Path SecretManagement.CyberArk -NuGetApiKey $env:PS_GALLERY_KEY
