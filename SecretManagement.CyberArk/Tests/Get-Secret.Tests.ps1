@@ -219,7 +219,7 @@ Describe 'Get-Secret' {
             }
 
             It 'omits switch parameters whose value is false so Get-CCPCredential does not see them bound' {
-                Mock Get-CCPCredential -MockWith ([scriptblock]::Create('$global:CCPBound = @($(if ($null -ne $___BoundParameters___) { $___BoundParameters___ } else { $PSBoundParameters }).Keys);' + (New-ProviderMock CCP 'svc-ccp' 'ccp-pass').ToString())) -ModuleName $ExtensionModule.Name
+                Mock Get-CCPCredential -MockWith ([scriptblock]::Create('$global:CCPBound = @($PesterBoundParameters.Keys);' + (New-ProviderMock CCP 'svc-ccp' 'ccp-pass').ToString())) -ModuleName $ExtensionModule.Name
                 $Params = @{
                     ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'
                     UseDefaultCredentials = $false; SkipCertificateCheck = $false; FailRequestOnPasswordChange = $false
@@ -232,7 +232,7 @@ Describe 'Get-Secret' {
             }
 
             It 'treats the string "false" as false and "true" as true for switch parameters' {
-                Mock Get-CCPCredential -MockWith ([scriptblock]::Create('$global:CCPBound = @($(if ($null -ne $___BoundParameters___) { $___BoundParameters___ } else { $PSBoundParameters }).Keys);' + (New-ProviderMock CCP 'svc-ccp' 'ccp-pass').ToString())) -ModuleName $ExtensionModule.Name
+                Mock Get-CCPCredential -MockWith ([scriptblock]::Create('$global:CCPBound = @($PesterBoundParameters.Keys);' + (New-ProviderMock CCP 'svc-ccp' 'ccp-pass').ToString())) -ModuleName $ExtensionModule.Name
                 $Params = @{ ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'; UseDefaultCredentials = 'false'; SkipCertificateCheck = 'true' }
                 $null = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $Params
                 $global:CCPBound | Should -Not -Contain 'UseDefaultCredentials'
@@ -252,8 +252,8 @@ Describe 'Get-Secret' {
                 "$Warn" | Should -Not -BeLike '*ConnectionType*'
                 "$Warn" | Should -Not -BeLike '*Verbose*'
                 Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
-                    -not $PSBoundParameters.ContainsKey('Bogus') -and -not $PSBoundParameters.ContainsKey('Safe') -and
-                    -not $PSBoundParameters.ContainsKey('AsCredential') -and $AppID -eq 'banana'
+                    -not $PesterBoundParameters.ContainsKey('Bogus') -and -not $PesterBoundParameters.ContainsKey('Safe') -and
+                    -not $PesterBoundParameters.ContainsKey('AsCredential') -and $AppID -eq 'banana'
                 }
             }
 
@@ -266,7 +266,7 @@ Describe 'Get-Secret' {
                 "$Warn" | Should -BeLike '*Credential*'
                 "$Warn" | Should -BeLike '*Certificate*'
                 Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
-                    -not $PSBoundParameters.ContainsKey('Credential') -and -not $PSBoundParameters.ContainsKey('Certificate')
+                    -not $PesterBoundParameters.ContainsKey('Credential') -and -not $PesterBoundParameters.ContainsKey('Certificate')
                 }
             }
         }

@@ -73,7 +73,7 @@ Describe 'Set-Secret' {
             $vp = @{ConnectionType = 'REST'; SafeName = 'VSafe'; PlatformId = 'VPlat'; userName = 'vuser' }
             Set-Secret -Name 'n' -Secret $Sec -VaultName $VaultName -AdditionalParameters $vp -Metadata @{ SafeName = 'MSafe' }
             Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
-                $SafeName -eq 'MSafe' -and $platformID -eq 'VPlat' -and $userName -eq 'vuser' -and -not $PSBoundParameters.ContainsKey('address')
+                $SafeName -eq 'MSafe' -and $platformID -eq 'VPlat' -and $userName -eq 'vuser' -and -not $PesterBoundParameters.ContainsKey('address')
             }
         }
 
@@ -116,7 +116,7 @@ Describe 'Set-Secret' {
             $m = $Full + @{ Colour = 'blue'; Owner = 'bob' }
             $out = Set-Secret -Name 'n' -Secret $Sec -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST'; Verbose = $true } -Metadata $m -Verbose -WarningAction Continue *>&1 | Out-String
             Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
-                -not $PSBoundParameters.ContainsKey('Colour') -and -not $PSBoundParameters.ContainsKey('Owner') -and $SafeName -eq 'MSafe'
+                -not $PesterBoundParameters.ContainsKey('Colour') -and -not $PesterBoundParameters.ContainsKey('Owner') -and $SafeName -eq 'MSafe'
             }
             $out | Should -BeLike '*Colour*'
             $out | Should -BeLike '*Owner*'
@@ -126,7 +126,7 @@ Describe 'Set-Secret' {
 
         It 'omits name when no Name is given' {
             Set-Secret -Secret $Sec -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Full
-            Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { -not $PSBoundParameters.ContainsKey('name') }
+            Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { -not $PesterBoundParameters.ContainsKey('name') }
         }
 
         It 'names unknown keys in verbose output on a direct -Verbose call' {
