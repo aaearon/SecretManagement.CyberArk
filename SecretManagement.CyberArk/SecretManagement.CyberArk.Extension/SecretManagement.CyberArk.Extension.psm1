@@ -5,42 +5,63 @@ function Get-Secret {
         [string] $VaultName,
         [hashtable] $AdditionalParameters,
         [Parameter(ValueFromPipeline = $true)]
-        [object] $PASAccount,
-        [string] $SafeName
+        [object] $PASAccount
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    switch ($VaultParameters.ConnectionType) {
+    switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
-            if ($null -eq $SafeName) { throw 'SafeName is required for the Credential Provider type' }
-            $Credential = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
-            if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
+            $Credential = Invoke-GetAIMCredential -Name $Name -AdditionalParameters $AdditionalParameters
+            if ($null -ne $Credential) {
+                $Credential = ConvertTo-ProviderCredential -Result $Credential -SecretProperty 'Password' -Name $Name
+                if ($null -eq $Credential) { return }
+            }
         }
         'CentralCredentialProvider' {
-            $Credential = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
-            if ($null -ne $Credential) { $Credential = $Credential.ToSecureString() }
+            $Credential = Invoke-GetCCPCredential -Name $Name -AdditionalParameters $AdditionalParameters
+            if ($null -ne $Credential) {
+                $Credential = ConvertTo-ProviderCredential -Result $Credential -SecretProperty 'Content' -Name $Name
+                if ($null -eq $Credential) { return }
+            }
         }
 
         'REST' {
-            Test-PASSession
+            if (-not (Test-PASSession)) { return }
 
             if ($PASAccount) {
-                $Account = Get-PASAccount -id $PASAccount.Id
+                $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
+                try {
+                    $Account = Get-PASAccount -id $PASAccount.Id
+                } catch {
+                    Write-Error "Failed to look up account '$Name': $($_.Exception.Message)"
+                    return
+                }
+                if ($VaultSafe -and -not ($Account.safeName -ieq $VaultSafe)) {
+                    Write-Error "Account '$Name' is not in the vault's safe '$VaultSafe'. Not retrieving the password."
+                    return
+                }
             } else {
                 $GetPASAccountParameters = @{
                     search = $Name
                 }
-                if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add('safeName', $AdditionalParameters.safeName) }
+                $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
+                if ($VaultSafe) { $GetPASAccountParameters.Add('safeName', $VaultSafe) }
 
-                $results = Get-PASAccount @GetPASAccountParameters
-
-                if ($results.Count -gt 1) {
-                    Write-Warning "Multiple matches found with name $Name. Returning the first match."
-                    $Account = $results[0]
-                } else {
-                    $Account = $results
+                try {
+                    $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -eq $Name } | Select-AccountInVaultSafe -SafeName $VaultSafe)
+                } catch {
+                    Write-Error "Failed to look up account '$Name': $($_.Exception.Message)"
+                    return
                 }
+
+                if ($results.Count -eq 0) {
+                    return $null
+                }
+                if ($results.Count -gt 1) {
+                    $message = "Found $($results.Count) accounts named '$Name'. Use a unique name or the PASAccount parameter."
+                    Write-Error $message
+                    return
+                }
+                $Account = $results[0]
             }
 
             $GetPASAccountPasswordParameters = @{
@@ -58,16 +79,38 @@ function Get-Secret {
                 $AccountSecret = Get-PASAccountPassword @GetPASAccountPasswordParameters
                 $Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Account.userName, $AccountSecret.ToSecureString()
             } catch {
-                $Credential = $null
+                Write-Error "Failed to retrieve the password for account '$Name': $($_.Exception.Message)"
+                return
             }
         }
 
         default {
-            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
+            return
         }
     }
 
     return $Credential
+}
+
+function ConvertTo-ProviderCredential {
+    # Validates a Get-AIMCredential/Get-CCPCredential result and converts it. Never reports secret values.
+    param ($Result, [string] $SecretProperty, [string] $Name)
+
+    if ([string]::IsNullOrEmpty("$($Result.UserName)")) {
+        Write-Error "The provider returned no UserName for '$Name'; cannot build a credential."
+        return
+    }
+    if ([string]::IsNullOrEmpty("$($Result.$SecretProperty)")) {
+        Write-Error "The provider returned an empty $SecretProperty for '$Name'; cannot build a credential."
+        return
+    }
+    try {
+        return $Result.ToCredential()
+    } catch {
+        Write-Error "Failed to build a credential for '$Name': $($_.Exception.Message)"
+        return
+    }
 }
 
 function Get-SecretInfo {
@@ -78,27 +121,53 @@ function Get-SecretInfo {
         [hashtable] $AdditionalParameters
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
+    if ([string]::IsNullOrEmpty($Filter)) { $Filter = '*' }
+    $VerboseOn = [bool]$AdditionalParameters.Verbose
 
-    switch ($VaultParameters.ConnectionType) {
-        'CredentialProvider' {
-            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::SecureString
-            $results = Invoke-GetAIMCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
-            $results = $results | Select-Object -Property * -ExcludeProperty Password
-        }
-        'CentralCredentialProvider' {
-            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::SecureString
-            $results = Invoke-GetCCPCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
-            $results = $results | Select-Object -Property * -ExcludeProperty Content
+    # Non-secret, useful fields only. Anything else (secrets, nested objects) is never copied into metadata.
+    $ProviderKeys = @('Name', 'UserName', 'Address', 'Safe', 'Folder', 'PolicyID', 'DeviceType')
+    $RestKeys = @('id', 'name', 'userName', 'address', 'safeName', 'platformId', 'secretType', 'createdTime')
+    $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
+
+    switch ($AdditionalParameters.ConnectionType) {
+        { $_ -in 'CredentialProvider', 'CentralCredentialProvider' } {
+            if ([WildcardPattern]::ContainsWildcardCharacters($Filter)) {
+                Write-Verbose "$($AdditionalParameters.ConnectionType) cannot enumerate secrets, so wildcard filter '$Filter' returns nothing. Specify the exact object name." -Verbose:$VerboseOn
+                return
+            }
+            $Keys = $ProviderKeys
+            if ($_ -eq 'CredentialProvider') {
+                # Get-Secret looks up by UserName, so report that name (not the object Name) to keep it round-trippable
+                $ReportLookupName = $true
+                $results = Invoke-GetAIMCredential -Name $Filter -AdditionalParameters $AdditionalParameters
+            } else {
+                $results = Invoke-GetCCPCredential -Name $Filter -AdditionalParameters $AdditionalParameters
+            }
         }
         'REST' {
-            $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
-            Test-PASSession
+            if (-not (Test-PASSession)) { return }
+            $Keys = $RestKeys
 
-            $results = Get-PASAccount -search "$Filter"
+            # Search with the longest non-wildcard fragment, then apply the real wildcard match locally.
+            # Character classes and backtick escapes make the literal fragments unreliable, so skip the prefilter then.
+            $SearchText = $null
+            if ($Filter -notmatch '[\[`]') {
+                $SearchText = [regex]::Split($Filter, '[*?\[\]]') | Sort-Object -Property Length -Descending | Select-Object -First 1
+            }
+            $GetPASAccountParameters = @{}
+            if ($SearchText) { $GetPASAccountParameters.search = $SearchText }
+            $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
+            if ($VaultSafe) { $GetPASAccountParameters.safeName = $VaultSafe }
+            try {
+                $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -like $Filter } | Select-AccountInVaultSafe -SafeName $VaultSafe)
+            } catch {
+                Write-Error "Failed to look up accounts matching '$Filter': $($_.Exception.Message)"
+                return
+            }
         }
         Default {
-            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
+            return
         }
     }
 
@@ -106,10 +175,16 @@ function Get-SecretInfo {
 
     foreach ($Account in $results) {
         $Metadata = [Ordered]@{}
-        $Account.psobject.properties | ForEach-Object { $Metadata[$PSItem.Name] = $PSItem.Value }
+        foreach ($Key in $Keys) {
+            $Property = $Account.psobject.Properties[$Key]
+            if ($null -eq $Property) { continue }
+            $Value = ConvertTo-SecretMetadataValue -Key $Key -Value $Property.Value
+            if ($null -ne $Value) { $Metadata[$Key] = $Value }
+        }
 
+        $SecretName = if ($ReportLookupName -or -not $Account.name) { $Filter } else { "$($Account.name)" }
         $SecretInfo = [Microsoft.PowerShell.SecretManagement.SecretInformation]::new(
-            "$($Account.name)", # Name of secret
+            $SecretName, # Name of secret
             $SecretDataType, # Secret data type [Microsoft.PowerShell.SecretManagement.SecretType]
             $VaultName, # Name of vault
             $Metadata)  # Optional Metadata parameter)
@@ -120,6 +195,32 @@ function Get-SecretInfo {
     return $Secrets
 }
 
+function ConvertTo-SecretMetadataValue {
+    # SecretManagement metadata supports string, int and DateTime only.
+    param ([string] $Key, $Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Key -eq 'createdTime' -and $Value -isnot [datetime]) {
+        # psPAS leaves REST times as Unix epoch seconds (milliseconds above 1e11); anything else is dropped, never thrown on
+        if ($Value -isnot [int] -and $Value -isnot [long] -and $Value -isnot [double] -and $Value -isnot [decimal]) { return $null }
+        try {
+            if ([math]::Abs([double]$Value) -gt 1e11) {
+                return [DateTimeOffset]::FromUnixTimeMilliseconds([long]$Value).UtcDateTime
+            }
+            return [DateTimeOffset]::FromUnixTimeSeconds([long]$Value).UtcDateTime
+        } catch {
+            return $null
+        }
+    }
+    if ($Value -is [string] -or $Value -is [datetime]) { return $Value }
+    if ($Value -is [int]) { return $Value }
+    if ($Value -is [long] -or $Value -is [int16] -or $Value -is [byte]) {
+        if ($Value -ge [int]::MinValue -and $Value -le [int]::MaxValue) { return [int]$Value }
+        return "$Value"
+    }
+    return $null
+}
+
 function Remove-Secret {
     [CmdletBinding()]
     param (
@@ -128,28 +229,46 @@ function Remove-Secret {
         [hashtable] $AdditionalParameters
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    switch ($VaultParameters.ConnectionType) {
+    switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
-            throw 'Remove-Secret is not supported for Credential Provider'
+            Write-Error 'Remove-Secret is not supported for Credential Provider'
+            return
         }
         'CentralCredentialProvider' {
-            throw 'Remove-Secret is not supported for Central Credential Provider'
+            Write-Error 'Remove-Secret is not supported for Central Credential Provider'
+            return
         }
         'REST' {
-            Test-PASSession
+            if (-not (Test-PASSession)) { return }
 
-            $results = Get-PASAccount -search "$Name"
+            $GetPASAccountParameters = @{ search = "$Name" }
+            $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'
+            if ($VaultSafe) { $GetPASAccountParameters.safeName = $VaultSafe }
+            try {
+                $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $PSItem.name -eq $Name } | Select-AccountInVaultSafe -SafeName $VaultSafe)
+            } catch {
+                Write-Error "Failed to look up account '$Name': $($_.Exception.Message)"
+                return
+            }
 
-            if ($results.Count -gt 1) {
-                Write-Error "Multiple matches found with name $Name. Not deleting anything."
-            } else {
-                $results | Remove-PASAccount
+            if ($results.Count -eq 0) {
+                Write-Error "No account found with name $Name. Not deleting anything."
+                return
+            } elseif ($results.Count -gt 1) {
+                Write-Error "Multiple accounts found with name $Name. Not deleting anything."
+                return
+            }
+
+            try {
+                Remove-PASAccount -id $results[0].Id
+            } catch {
+                Write-Error "Failed to remove account '$Name': $($_.Exception.Message)"
+                return
             }
         }
         Default {
-            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
+            return
         }
     }
 }
@@ -160,40 +279,91 @@ function Set-Secret {
         [string] $Name,
         [object] $Secret,
         [string] $VaultName,
-        [hashtable] $AdditionalParameters
+        [hashtable] $AdditionalParameters,
+        [hashtable] $Metadata
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    switch ($VaultParameters.ConnectionType) {
+    switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
-            throw 'Set-Secret is not supported for Credential Provider'
+            Write-Error 'Set-Secret is not supported for Credential Provider'
+            return
         }
         'CentralCredentialProvider' {
-            throw 'Set-Secret is not supported for Central Credential Provider'
+            Write-Error 'Set-Secret is not supported for Central Credential Provider'
+            return
         }
         'REST' {
-            if ($null -eq $AdditionalParameters.SafeName -or $null -eq $AdditionalParameters.PlatformId) {
-                throw 'SafeName and PlatformId are required keys in $AdditionalParameters'
+            $Known = 'SafeName', 'PlatformId', 'address', 'userName'
+            $Resolved = @{}
+            foreach ($Key in $Known) {
+                $Value = Get-CaseInsensitiveValue -Table $Metadata -Key $Key
+                if ($null -eq $Value) { $Value = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key $Key }
+                if ($null -ne $Value) { $Resolved[$Key] = $Value }
             }
 
-            Test-PASSession
+            $Unknown = @($Metadata.Keys | Where-Object { $_ -notin $Known })
+            if ($Unknown) {
+                Write-Verbose "Ignoring unsupported Metadata keys: $($Unknown -join ', ')" -Verbose:($AdditionalParameters.Verbose -eq $true -or $VerbosePreference -eq 'Continue')
+            }
+
+            $Missing = @('SafeName', 'PlatformId' | Where-Object { -not $Resolved.ContainsKey($_) })
+            if ($Missing) {
+                Write-Error "SafeName and PlatformId are required (via -Metadata or VaultParameters); missing: $($Missing -join ', ')"
+                return
+            }
+
+            # psPAS -secret takes a SecureString; accept what SecretManagement hands over (PSCredential from Get-Secret, string)
+            $SecretValue = $Secret
+            if ($Secret -is [pscredential]) {
+                $SecretValue = $Secret.Password
+                if (-not $Resolved.ContainsKey('userName') -and -not [string]::IsNullOrEmpty($Secret.UserName)) { $Resolved['userName'] = $Secret.UserName }
+            } elseif ($Secret -is [string]) {
+                $SecretValue = ConvertTo-SecureString -String $Secret -AsPlainText -Force
+            } elseif ($null -ne $Secret -and $Secret -isnot [securestring]) {
+                Write-Error "Set-Secret: unsupported secret type $($Secret.GetType().FullName) for REST; use a SecureString, string or PSCredential"
+                return
+            }
+
+            if (-not (Test-PASSession)) { return }
 
             $AddPASAccountParameters = @{
-                SafeName   = $AdditionalParameters.SafeName
-                PlatformId = $AdditionalParameters.PlatformId
+                SafeName   = $Resolved.SafeName
+                PlatformId = $Resolved.PlatformId
             }
             if ($Name) { $AddPASAccountParameters.Add('name', $Name) }
-            if ($AdditionalParameters.userName) { $AddPASAccountParameters.Add('userName', $AdditionalParameters.userName) }
-            if ($AdditionalParameters.address) { $AddPASAccountParameters.Add('address', $AdditionalParameters.address) }
-            if ($Secret) { $AddPASAccountParameters.Add('secret', $Secret) }
+            if ($Resolved.ContainsKey('userName')) { $AddPASAccountParameters.Add('userName', $Resolved.userName) }
+            if ($Resolved.ContainsKey('address')) { $AddPASAccountParameters.Add('address', $Resolved.address) }
+            if ($SecretValue) { $AddPASAccountParameters.Add('secret', $SecretValue) }
 
-            Add-PASAccount @AddPASAccountParameters
+            try {
+                Add-PASAccount @AddPASAccountParameters
+            } catch {
+                Write-Error "Failed to add account '$Name': $($_.Exception.Message)"
+                return
+            }
         }
         Default {
-            throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
+            return
         }
     }
+}
+
+function Select-AccountInVaultSafe {
+    # Enforces the vault's SafeName scope client-side too, so it holds even if the server-side filter does not.
+    param ([Parameter(ValueFromPipeline)] $Account, [string] $SafeName)
+    process {
+        if ([string]::IsNullOrEmpty($SafeName) -or $Account.safeName -ieq $SafeName) { $Account }
+    }
+}
+
+function Get-CaseInsensitiveValue {
+    # Returns the first non-empty value whose key equals $Key ignoring case, else $null.
+    param ([hashtable] $Table, [string] $Key)
+    foreach ($K in $Table.Keys) {
+        if ($K -ieq $Key -and -not [string]::IsNullOrEmpty("$($Table[$K])")) { return $Table[$K] }
+    }
+    return $null
 }
 
 function Test-SecretVault {
@@ -205,42 +375,85 @@ function Test-SecretVault {
         [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
-    return $true
+    switch ($AdditionalParameters.ConnectionType) {
+        'CredentialProvider' {
+            if (-not $AdditionalParameters.AppID) { Write-Error 'CredentialProvider vault parameter AppID is missing'; return $false }
+            if (-not (Get-Command -Name Get-AIMCredential -ErrorAction SilentlyContinue)) { Write-Error 'Get-AIMCredential command not found'; return $false }
+            return $true
+        }
+        'CentralCredentialProvider' {
+            if (-not $AdditionalParameters.AppID) { Write-Error 'CentralCredentialProvider vault parameter AppID is missing'; return $false }
+            if (-not $AdditionalParameters.URL) { Write-Error 'CentralCredentialProvider vault parameter URL is missing'; return $false }
+            if (-not (Get-Command -Name Get-CCPCredential -ErrorAction SilentlyContinue)) { Write-Error 'Get-CCPCredential command not found'; return $false }
+            return $true
+        }
+        'REST' {
+            return (Test-PASSession)
+        }
+        Default {
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
+            return $false
+        }
+    }
 }
 
 function Test-PASSession {
     try {
-        $null = Get-PASSession
+        if (-not (Get-PASSession).BaseURI) { throw 'No active session' }
     } catch {
-        throw 'Failed to get PASSession. Run New-PASSession again.'
+        Write-Error 'Failed to get PASSession. Run New-PASSession again.'
+        return $false
     }
-
+    return $true
 }
 
 function Invoke-GetCCPCredential {
     [CmdletBinding()]
     param (
         [string] $Name,
-        [string] $VaultName,
         [hashtable] $AdditionalParameters
     )
 
-    if ($null -ne $VaultName) {
-        $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-    }
-    else {
-        $VaultParameters = (Get-SecretVault).VaultParameters
-    }
-    if ($null -eq $VaultParameters) {
-        throw "No vault parameters!"
-    }
+    # Vault-level, JSON-persistable Get-CCPCredential connection settings (CredentialRetriever 4.0.0).
+    # Credential/Certificate cannot survive VaultParameters persistence; Safe/Folder/UserName/Address/Database/
+    # PolicyID/Query/QueryFormat/Reason identify a secret; AsCredential/AsSecureString would change the return type.
+    $AllowedKeys = @(
+        'AppID', 'URL', 'SkipCertificateCheck', 'UseDefaultCredentials', 'CertificateThumbPrint',
+        'WebServiceName', 'ConnectionTimeout', 'Method', 'FailRequestOnPasswordChange'
+    )
+    $SilentKeys = @('ConnectionType', 'Verbose')
+    # Get-CCPCredential acts on a switch being bound, even as $false (UseDefaultCredentials would send OS credentials),
+    # so switches are passed only when truthy.
+    $SwitchKeys = @('SkipCertificateCheck', 'UseDefaultCredentials', 'FailRequestOnPasswordChange')
 
-    $GetCCPCredentialParameters = [System.Collections.Hashtable]::new($VaultParameters)
-    $GetCCPCredentialParameters.Remove("ConnectionType")
-    $GetCCPCredentialParameters.Add("Object", $Name)
+    $GetCCPCredentialParameters = @{}
+    $IgnoredKeys = @()
+    foreach ($Key in $AdditionalParameters.Keys) {
+        if ($Key -in $AllowedKeys) {
+            $CanonicalKey = $AllowedKeys | Where-Object { $_ -eq $Key }
+            $Value = $AdditionalParameters[$Key]
+            if ($CanonicalKey -in $SwitchKeys) {
+                $Parsed = $false
+                if ($Value -is [string] -and [bool]::TryParse($Value, [ref]$Parsed)) { $Value = $Parsed }
+                if (-not $Value) { continue }
+                $Value = $true
+            }
+            $GetCCPCredentialParameters[$CanonicalKey] = $Value
+        } elseif ($Key -notin $SilentKeys) {
+            $IgnoredKeys += $Key
+        }
+    }
+    if ($IgnoredKeys) {
+        Write-Warning "Ignoring unsupported vault parameter(s) for CentralCredentialProvider: $($IgnoredKeys -join ', ')"
+    }
+    $GetCCPCredentialParameters.Add('Object', $Name)
 
-    $Credential = Get-CCPCredential @GetCCPCredentialParameters
+    try {
+        $Credential = Get-CCPCredential @GetCCPCredentialParameters
+    } catch {
+        Write-Error "Failed to retrieve '$Name' from the Central Credential Provider: $($_.Exception.Message)"
+        return
+    }
     return $Credential
 }
 
@@ -248,22 +461,26 @@ function Invoke-GetAIMCredential {
     [CmdletBinding()]
     param (
         [string] $Name,
-        [string] $SafeName,
-        [string] $VaultName,
         [hashtable] $AdditionalParameters
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
+    try {
+        if ($AdditionalParameters.ClientPath) { Set-AIMConfiguration -ClientPath $AdditionalParameters.ClientPath }
 
-    if ($VaultParameters.ClientPath) { Set-AIMConfiguration -ClientPath $VaultParameters.ClientPath }
+        $GetAIMCredentialParameters = @{
+            AppID    = $AdditionalParameters.AppID
+            UserName = $Name
+        }
+        # Optional vault-level scope; Get-AIMCredential's parameter is named Safe
+        if ($AdditionalParameters.SafeName) { $GetAIMCredentialParameters.Add('Safe', $AdditionalParameters.SafeName) }
+        # UserName is always requested so a PSCredential can be built
+        $RequiredProps = @($AdditionalParameters.RequiredProps) + 'UserName' | Where-Object { $_ } | Select-Object -Unique
+        $GetAIMCredentialParameters.Add('RequiredProps', $RequiredProps)
 
-    $GetAIMCredentialParameters = @{
-        AppID    = $VaultParameters.AppID
-        UserName = $Name
+        $Credential = Get-AIMCredential @GetAIMCredentialParameters
+    } catch {
+        Write-Error "Failed to retrieve '$Name' from the Credential Provider: $($_.Exception.Message)"
+        return
     }
-    if ($SafeName) { $GetAIMCredentialParameters.Add('SafeName', $SafeName) }
-    if ($AdditionalParameters.RequiredProps) { $GetAIMCredentialParameters.Add('RequiredProps', $AdditionalParameters.RequiredProps) }
-
-    $Credential = Get-AIMCredential @GetAIMCredentialParameters
     return $Credential
 }

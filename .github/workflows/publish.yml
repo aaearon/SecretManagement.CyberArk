@@ -7,12 +7,20 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
+  test:
+    uses: ./.github/workflows/pester.yml
+
   publish:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Installs dependencies
         shell: pwsh
         run: |
@@ -20,8 +28,9 @@ jobs:
           Install-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement -Force
           Import-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement -Force
       - name: Publish Module to PowerShell Gallery
-        uses: pcgeek86/publish-powershell-module-action@v20
-        id: publish-module
-        with:
-          modulePath: SecretManagement.CyberArk
-          NuGetApiKey: ${{ secrets.PS_GALLERY_KEY }}
+        shell: pwsh
+        env:
+          PS_GALLERY_KEY: ${{ secrets.PS_GALLERY_KEY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Publish-Module -Path SecretManagement.CyberArk -NuGetApiKey $env:PS_GALLERY_KEY
