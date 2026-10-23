@@ -15,15 +15,12 @@
 }
 
 AfterAll {
-    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     Remove-Module $ExtensionModule -Force
 }
 Describe 'Remove-Secret' {
     Context 'when connection type is REST' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'REST' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
@@ -102,30 +99,21 @@ Describe 'Remove-Secret' {
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $id -eq '1' }
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 
     Context 'when connection type is Credential Provider' {
         It 'writes an error' {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CredentialProvider' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Remove-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Remove-Secret is not supported for Credential Provider*'
-            Unregister-SecretVault -Name $VaultName
         }
     }
 
     Context 'when connection type is Central Credential Provider' {
         It 'writes an error' {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CentralCredentialProvider' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Remove-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Remove-Secret is not supported for Central Credential Provider*'
-            Unregister-SecretVault -Name $VaultName
         }
     }
 }

@@ -17,17 +17,14 @@
 }
 
 AfterAll {
-    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     Remove-Module $ExtensionModule -Force
 }
 Describe 'Get-SecretInfo' {
     Context 'when connection type is REST' {
         BeforeAll {
 
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
 
             $VaultParams = @{ConnectionType = 'REST' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
@@ -137,15 +134,10 @@ Describe 'Get-SecretInfo' {
             }
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
     Context 'when connection type is Central Credential Provder' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-CCPCredential' {
@@ -190,16 +182,11 @@ Describe 'Get-SecretInfo' {
             $Info.Name | Should -Be 'myobject'
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 
     Context 'when connection type is Credential Provder' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CredentialProvider'; AppID = 'banana' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-AIMCredential' {
@@ -262,8 +249,5 @@ Describe 'Get-SecretInfo' {
             $Info.Name | Should -Be 'myobject'
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 }

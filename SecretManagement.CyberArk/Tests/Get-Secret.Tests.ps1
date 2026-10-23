@@ -24,16 +24,13 @@ BeforeAll {
 }
 
 AfterAll {
-    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     Remove-Module $ExtensionModule -Force
 }
 
 Describe 'Get-Secret' {
     Context 'when connection type is REST' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'REST' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
         It 'should return a <PSType> for <SecretName>' {
@@ -156,19 +153,13 @@ Describe 'Get-Secret' {
         It 'should have a PASAccount parameter' {
             'PASAccount' | Should -BeIn ((Get-Command -Module $ExtensionModule.Name -Name 'Get-Secret').Parameters.Keys)
         }
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 
     Context 'when connection type is unknown' {
         It 'writes an error' {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'Bogus' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
             "$Err" | Should -BeLike '*ConnectionType Bogus is not supported*'
-            Unregister-SecretVault -Name $VaultName
         }
     }
 
@@ -176,9 +167,7 @@ Describe 'Get-Secret' {
 
 
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-CCPCredential' {
@@ -282,16 +271,11 @@ Describe 'Get-Secret' {
             }
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 
     Context 'when connection type is Credential Provder' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CredentialProvider'; AppID = 'banana' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-AIMCredential' {
@@ -342,8 +326,5 @@ Describe 'Get-Secret' {
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $Safe -eq 'Windows' }
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 }
