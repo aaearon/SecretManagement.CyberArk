@@ -5,9 +5,7 @@ BeforeAll {
     Import-Module Microsoft.PowerShell.SecretManagement
     $ExtensionModule = Import-Module "$PSScriptRoot/../SecretManagement.CyberArk.Extension/*.psd1" -Force -PassThru
     $VaultName = 'CyberArk.Test'
-    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     $VaultParams = @{ConnectionType = 'REST' }
-    Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
     Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
     Mock Get-PASAccount -MockWith { $null } -ModuleName $ExtensionModule.Name
     Mock Add-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
@@ -15,7 +13,6 @@ BeforeAll {
 }
 
 AfterAll {
-    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     Remove-Module $ExtensionModule -Force
 }
 

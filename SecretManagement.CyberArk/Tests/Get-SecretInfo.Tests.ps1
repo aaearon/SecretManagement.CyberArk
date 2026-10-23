@@ -17,17 +17,14 @@
 }
 
 AfterAll {
-    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     Remove-Module $ExtensionModule -Force
 }
 Describe 'Get-SecretInfo' {
     Context 'when connection type is REST' {
         BeforeAll {
 
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
 
             $VaultParams = @{ConnectionType = 'REST' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
@@ -58,6 +55,40 @@ Describe 'Get-SecretInfo' {
             "$($Info.Metadata.Values)" | Should -Not -BeLike '*sekrit*'
         }
 
+        It 'scopes results to the vault safeName' {
+            Mock Get-PASAccount -MockWith {
+                @(
+                    [PSCustomObject]@{ id = '1'; name = 'acctA'; safeName = 'SafeA' },
+                    [PSCustomObject]@{ id = '2'; name = 'acctB'; safeName = 'SafeB' }
+                )
+            } -ModuleName $ExtensionModule.Name
+            $Info = @(Get-SecretInfo -Filter '*' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ SafeName = 'safea' }))
+            $Info.Name | Should -Be 'acctA'
+            Should -Invoke -CommandName Get-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $safeName -eq 'safea' }
+        }
+
+        It 'writes an error with the exception message instead of throwing when the lookup fails' {
+            Mock Get-PASAccount -MockWith { throw 'pvwa unreachable' } -ModuleName $ExtensionModule.Name
+            Get-SecretInfo -Filter '*' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*pvwa unreachable*'
+        }
+
+        It 'converts createdTime given in milliseconds' {
+            Mock Get-PASAccount -MockWith { [PSCustomObject]@{ id = '7'; name = 'acct'; createdTime = 1700000000000 } } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'acct' -VaultName $VaultName -AdditionalParameters $VaultParams
+            $Info.Metadata['createdTime'] | Should -Be ([datetime]::new(2023, 11, 14, 22, 13, 20, [DateTimeKind]::Utc))
+        }
+
+        It 'drops an out-of-range or invalid createdTime without throwing' -ForEach @(
+            @{ Value = 9000000000000000000L }, @{ Value = -9000000000000000000L }, @{ Value = [double]::MaxValue }, @{ Value = 'not-a-time' }, @{ Value = $true }
+        ) {
+            $global:CreatedTimeValue = $Value
+            Mock Get-PASAccount -MockWith { [PSCustomObject]@{ id = '7'; name = 'acct'; createdTime = $global:CreatedTimeValue } } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'acct' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction Stop
+            $Info.Name | Should -Be 'acct'
+            $Info.Metadata.Keys | Should -Not -Contain 'createdTime'
+        }
+
         Context 'wildcard filtering' {
             BeforeEach {
                 Mock Get-PASAccount -MockWith {
@@ -78,7 +109,7 @@ Describe 'Get-SecretInfo' {
             It 'returns everything and does not search for *' {
                 $Info = @(Get-SecretInfo -Filter '*' -VaultName $VaultName -AdditionalParameters $VaultParams)
                 $Info.Count | Should -Be 3
-                Should -Invoke -CommandName Get-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { -not $PSBoundParameters.ContainsKey('search') }
+                Should -Invoke -CommandName Get-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { -not $PesterBoundParameters.ContainsKey('search') }
             }
 
             It 'treats an empty filter as *' {
@@ -90,20 +121,29 @@ Describe 'Get-SecretInfo' {
                 $Info | Should -BeNullOrEmpty
             }
 
+            It 'does not prefilter with -search when the filter has a [ character class, and still matches' {
+                Mock Get-PASAccount -MockWith ([scriptblock]::Create('$global:PASBound = @($PesterBoundParameters.Keys); @([PSCustomObject]@{ id = "1"; name = "abz" }, [PSCustomObject]@{ id = "2"; name = "bc" })')) -ModuleName $ExtensionModule.Name
+                $Info = @(Get-SecretInfo -Filter 'a[bc]z' -VaultName $VaultName -AdditionalParameters $VaultParams)
+                $Info.Name | Should -Be 'abz'
+                $global:PASBound | Should -Not -Contain 'search'
+            }
+
+            It 'does not prefilter with -search when the filter has an escaped wildcard, and matches it literally' {
+                Mock Get-PASAccount -MockWith ([scriptblock]::Create('$global:PASBound = @($PesterBoundParameters.Keys); @([PSCustomObject]@{ id = "1"; name = "foo*bar" }, [PSCustomObject]@{ id = "2"; name = "fooXbar" })')) -ModuleName $ExtensionModule.Name
+                $Info = @(Get-SecretInfo -Filter 'foo`*bar' -VaultName $VaultName -AdditionalParameters $VaultParams)
+                $Info.Name | Should -Be 'foo*bar'
+                $global:PASBound | Should -Not -Contain 'search'
+            }
+
             It 'supports ? wildcards' {
                 @(Get-SecretInfo -Filter 'localAdmin0?' -VaultName $VaultName -AdditionalParameters $VaultParams).Count | Should -Be 2
             }
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
     Context 'when connection type is Central Credential Provder' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-CCPCredential' {
@@ -115,6 +155,13 @@ Describe 'Get-SecretInfo' {
             $Info.Type | Should -Be 'PSCredential'
             $Info.Name | Should -Be 'admin'
             $Info.Metadata.Keys | Should -Not -Contain 'Content'
+        }
+
+        It 'writes an error with the exception message when Get-CCPCredential throws' {
+            Mock Get-CCPCredential -MockWith { throw 'ccp exploded' } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
+            $Info | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*admin*ccp exploded*'
         }
 
         It 'returns only allowed metadata keys with allowed types' {
@@ -141,16 +188,11 @@ Describe 'Get-SecretInfo' {
             $Info.Name | Should -Be 'myobject'
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 
     Context 'when connection type is Credential Provder' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CredentialProvider'; AppID = 'banana' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-AIMCredential' {
@@ -162,6 +204,23 @@ Describe 'Get-SecretInfo' {
             $Info.Type | Should -Be 'PSCredential'
             $Info.Name | Should -Be 'admin'
             $Info.Metadata.Keys | Should -Not -Contain 'Password'
+        }
+
+        It 'writes an error with the exception message when Get-AIMCredential throws' {
+            Mock Get-AIMCredential -MockWith { throw 'aim exploded' } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
+            $Info | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*admin*aim exploded*'
+        }
+
+        It 'reports the name it was looked up by (UserName) so the name round-trips into Get-Secret' {
+            Mock Get-AIMCredential -MockWith {
+                [PSCustomObject]@{ UserName = 'svc-aim'; Name = 'Operating System-WinDomain-host-svc-aim'; Password = 'x' }
+            } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'svc-aim' -VaultName $VaultName -AdditionalParameters $VaultParams
+            $Info.Name | Should -Be 'svc-aim'
+            $null = Get-Secret -Name $Info.Name -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue
+            Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name -Times 2 -Exactly -ParameterFilter { $UserName -eq 'svc-aim' }
         }
 
         It 'passes the SafeName vault parameter to Get-AIMCredential as Safe' {
@@ -196,8 +255,5 @@ Describe 'Get-SecretInfo' {
             $Info.Name | Should -Be 'myobject'
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 }

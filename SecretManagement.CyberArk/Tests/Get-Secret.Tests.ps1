@@ -5,19 +5,32 @@ BeforeAll {
 
     $ExtensionModule = Import-Module "$PSScriptRoot/../SecretManagement.CyberArk.Extension/*.psd1" -Force -PassThru
     $VaultName = 'CyberArk.Test'
+
+    # Mock return objects built the way CredentialRetriever 4.0.0 builds them: a PSObject with ToSecureString and
+    # ToCredential ScriptMethods attached via Add-Member. Returned as scriptblocks that are self-contained, so they
+    # work as -MockWith whichever module instance SecretManagement loaded.
+    function New-ProviderMock {
+        param([string] $Kind, $UserName, $Secret)
+        $SecretProperty = if ($Kind -eq 'CCP') { 'Content' } else { 'Password' }
+        $Source = @"
+            `$Result = [PSCustomObject]@{ UserName = `$UserName; $SecretProperty = `$Secret }
+            `$Result | Add-Member -MemberType ScriptMethod -Name ToSecureString -Value { `$this.$SecretProperty | ConvertTo-SecureString -AsPlainText -Force } -Force
+            `$Result | Add-Member -MemberType ScriptMethod -Name ToCredential -Value { New-Object System.Management.Automation.PSCredential(`$this.UserName, `$this.ToSecureString()) } -Force
+            `$Result
+"@
+        $Prefix = '$UserName = {0}; $Secret = {1};' -f $(if ($null -eq $UserName) { '$null' } else { "'$UserName'" }), "'$Secret'"
+        [scriptblock]::Create($Prefix + $Source)
+    }
 }
 
 AfterAll {
-    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     Remove-Module $ExtensionModule -Force
 }
 
 Describe 'Get-Secret' {
     Context 'when connection type is REST' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'REST' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
         It 'should return a <PSType> for <SecretName>' {
@@ -92,12 +105,78 @@ Describe 'Get-Secret' {
             }
         }
 
+        It 'returns null and retrieves no password when the exact-name match is in a different safe than the vault safeName' {
+            Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1'; safeName = 'SafeB' } } -ModuleName $ExtensionModule.Name
+            Mock Get-PASAccountPassword -MockWith {} -ModuleName $ExtensionModule.Name
+
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ safeName = 'SafeA' }) | Should -BeNullOrEmpty
+            Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+        }
+
+        Context 'direct PASAccount' {
+            BeforeEach {
+                Mock Get-PASAccountPassword -MockWith {} -ModuleName $ExtensionModule.Name
+            }
+
+            It 'errors and fetches no password when the account is in a different safe than the vault safeName' {
+                Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; Id = '9'; safeName = 'SafeB' } } -ModuleName $ExtensionModule.Name
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ safeName = 'safea' }) -PASAccount ([PSCustomObject]@{ Id = '9' }) -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+                "$Err" | Should -BeLike '*safe*'
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+
+            It 'errors and fetches no password when the account has no safeName and the vault is scoped' {
+                Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; Id = '9' } } -ModuleName $ExtensionModule.Name
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ safeName = 'SafeA' }) -PASAccount ([PSCustomObject]@{ Id = '9' }) -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+                "$Err" | Should -BeLike '*safe*'
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+
+            It 'fetches the password when the safe matches case-insensitively' {
+                Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '9'; safeName = 'SAFEA' } } -ModuleName $ExtensionModule.Name
+                Mock Get-PASAccountPassword -MockWith {
+                    $R = [PSCustomObject]@{ Password = 'fake' }
+                    $R | Add-Member -MemberType ScriptMethod -Name ToSecureString -Value { $this.Password | ConvertTo-SecureString -AsPlainText -Force }
+                    $R
+                } -ModuleName $ExtensionModule.Name
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{ safeName = 'safea' }) -PASAccount ([PSCustomObject]@{ Id = '9' }) | Should -BeOfType System.Management.Automation.PSCredential
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $AccountId -eq '9' }
+            }
+
+            It 'writes an error instead of throwing when the by-id lookup throws' {
+                Mock Get-PASAccount -MockWith { throw 'id lookup failed' } -ModuleName $ExtensionModule.Name
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -PASAccount ([PSCustomObject]@{ Id = '9' }) -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+                "$Err" | Should -BeLike '*id lookup failed*'
+                Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+        }
+
         It 'writes an error with the underlying message when retrieving the password fails' {
             Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1' } } -ModuleName $ExtensionModule.Name
             Mock Get-PASAccountPassword -MockWith { throw 'access denied by policy' } -ModuleName $ExtensionModule.Name
 
             Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
             "$Err" | Should -BeLike '*admin*access denied by policy*'
+        }
+
+        It 'writes an error with the underlying message when the account lookup throws' {
+            Mock Get-PASAccount -MockWith { throw 'lookup timed out' } -ModuleName $ExtensionModule.Name
+            Mock Get-PASAccountPassword -MockWith {} -ModuleName $ExtensionModule.Name
+
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*admin*lookup timed out*'
+            Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+        }
+
+        It 'includes the exception message but not Reason, TicketId or secrets in the error' {
+            Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1' } } -ModuleName $ExtensionModule.Name
+            Mock Get-PASAccountPassword -MockWith { throw 'policy denied retrieval' } -ModuleName $ExtensionModule.Name
+            $Params = $VaultParams + @{ Reason = 'reason-canary-123'; TicketId = 'ticket-canary-456' }
+
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $Params -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*policy denied retrieval*'
+            "$Err" | Should -Not -BeLike '*reason-canary-123*'
+            "$Err" | Should -Not -BeLike '*ticket-canary-456*'
         }
 
         It 'writes an error when there is no PASSession' {
@@ -112,19 +191,13 @@ Describe 'Get-Secret' {
         It 'should have a PASAccount parameter' {
             'PASAccount' | Should -BeIn ((Get-Command -Module $ExtensionModule.Name -Name 'Get-Secret').Parameters.Keys)
         }
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 
     Context 'when connection type is unknown' {
         It 'writes an error' {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'Bogus' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
             "$Err" | Should -BeLike '*ConnectionType Bogus is not supported*'
-            Unregister-SecretVault -Name $VaultName
         }
     }
 
@@ -132,18 +205,11 @@ Describe 'Get-Secret' {
 
 
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-CCPCredential' {
-            Mock Get-CCPCredential -MockWith {
-                $Result = [PSCustomObject]@{ UserName = 'svc-ccp'; Content = 'ccp-pass'; Address = 'host1'; Name = 'admin' }
-                $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this.Content | ConvertTo-SecureString -AsPlainText -Force }
-                $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
-                return $Result
-            } -ModuleName $ExtensionModule.Name
+            Mock Get-CCPCredential -MockWith (New-ProviderMock CCP 'svc-ccp' 'ccp-pass') -ModuleName $ExtensionModule.Name
             $Secret = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams
             Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name
             $Secret | Should -BeOfType System.Management.Automation.PSCredential
@@ -151,14 +217,28 @@ Describe 'Get-Secret' {
             $Secret.GetNetworkCredential().Password | Should -Be 'ccp-pass'
         }
 
+        It 'writes an error naming UserName when it is missing' {
+            Mock Get-CCPCredential -MockWith (New-ProviderMock CCP $null 'ccp-pass') -ModuleName $ExtensionModule.Name
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*UserName*'
+            "$Err" | Should -Not -BeLike '*ccp-pass*'
+        }
+
+        It 'writes an error naming Content when the password is empty' {
+            Mock Get-CCPCredential -MockWith (New-ProviderMock CCP 'svc-ccp' '') -ModuleName $ExtensionModule.Name
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*Content*'
+        }
+
+        It 'writes an error with the exception message when Get-CCPCredential throws' {
+            Mock Get-CCPCredential -MockWith { throw 'CCP timed out' } -ModuleName $ExtensionModule.Name
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*admin*CCP timed out*'
+        }
+
         Context 'vault parameter allowlist' {
             BeforeEach {
-                Mock Get-CCPCredential -MockWith {
-                    $Result = [PSCustomObject]@{ UserName = 'svc-ccp'; Content = 'ccp-pass'; Name = 'admin' }
-                    $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this.Content | ConvertTo-SecureString -AsPlainText -Force }
-                    $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
-                    return $Result
-                } -ModuleName $ExtensionModule.Name
+                Mock Get-CCPCredential -MockWith (New-ProviderMock CCP 'svc-ccp' 'ccp-pass') -ModuleName $ExtensionModule.Name
             }
 
             It 'passes allowed connection settings and the object name' {
@@ -176,6 +256,27 @@ Describe 'Get-Secret' {
                 }
             }
 
+            It 'omits switch parameters whose value is false so Get-CCPCredential does not see them bound' {
+                Mock Get-CCPCredential -MockWith ([scriptblock]::Create('$global:CCPBound = @($PesterBoundParameters.Keys);' + (New-ProviderMock CCP 'svc-ccp' 'ccp-pass').ToString())) -ModuleName $ExtensionModule.Name
+                $Params = @{
+                    ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'
+                    UseDefaultCredentials = $false; SkipCertificateCheck = $false; FailRequestOnPasswordChange = $false
+                }
+                $null = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $Params
+                $global:CCPBound | Should -Contain 'AppID'
+                $global:CCPBound | Should -Not -Contain 'UseDefaultCredentials'
+                $global:CCPBound | Should -Not -Contain 'SkipCertificateCheck'
+                $global:CCPBound | Should -Not -Contain 'FailRequestOnPasswordChange'
+            }
+
+            It 'treats the string "false" as false and "true" as true for switch parameters' {
+                Mock Get-CCPCredential -MockWith ([scriptblock]::Create('$global:CCPBound = @($PesterBoundParameters.Keys);' + (New-ProviderMock CCP 'svc-ccp' 'ccp-pass').ToString())) -ModuleName $ExtensionModule.Name
+                $Params = @{ ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'; UseDefaultCredentials = 'false'; SkipCertificateCheck = 'true' }
+                $null = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $Params
+                $global:CCPBound | Should -Not -Contain 'UseDefaultCredentials'
+                $global:CCPBound | Should -Contain 'SkipCertificateCheck'
+            }
+
             It 'ignores Verbose silently and warns about unknown keys, naming only the keys' {
                 $Params = @{
                     ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'; Verbose = $false
@@ -189,8 +290,8 @@ Describe 'Get-Secret' {
                 "$Warn" | Should -Not -BeLike '*ConnectionType*'
                 "$Warn" | Should -Not -BeLike '*Verbose*'
                 Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
-                    -not $PSBoundParameters.ContainsKey('Bogus') -and -not $PSBoundParameters.ContainsKey('Safe') -and
-                    -not $PSBoundParameters.ContainsKey('AsCredential') -and $AppID -eq 'banana'
+                    -not $PesterBoundParameters.ContainsKey('Bogus') -and -not $PesterBoundParameters.ContainsKey('Safe') -and
+                    -not $PesterBoundParameters.ContainsKey('AsCredential') -and $AppID -eq 'banana'
                 }
             }
 
@@ -203,30 +304,20 @@ Describe 'Get-Secret' {
                 "$Warn" | Should -BeLike '*Credential*'
                 "$Warn" | Should -BeLike '*Certificate*'
                 Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
-                    -not $PSBoundParameters.ContainsKey('Credential') -and -not $PSBoundParameters.ContainsKey('Certificate')
+                    -not $PesterBoundParameters.ContainsKey('Credential') -and -not $PesterBoundParameters.ContainsKey('Certificate')
                 }
             }
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 
     Context 'when connection type is Credential Provder' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CredentialProvider'; AppID = 'banana' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-AIMCredential' {
-            Mock Get-AIMCredential -MockWith {
-                $Result = [PSCustomObject]@{ UserName = 'svc-aim'; Password = 'aim-pass'; Address = 'host2'; Name = 'windowsAdmin01' }
-                $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this.Password | ConvertTo-SecureString -AsPlainText -Force }
-                $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
-                return $Result
-            } -ModuleName $ExtensionModule.Name
+            Mock Get-AIMCredential -MockWith (New-ProviderMock AIM 'svc-aim' 'aim-pass') -ModuleName $ExtensionModule.Name
             $Secret = Get-Secret -Name 'windowsAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name
             $Secret | Should -BeOfType System.Management.Automation.PSCredential
@@ -234,41 +325,44 @@ Describe 'Get-Secret' {
             $Secret.GetNetworkCredential().Password | Should -Be 'aim-pass'
         }
 
+        It 'writes an error naming UserName when it is missing' {
+            Mock Get-AIMCredential -MockWith (New-ProviderMock AIM $null 'aim-pass') -ModuleName $ExtensionModule.Name
+            Get-Secret -Name 'windowsAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*UserName*'
+            "$Err" | Should -Not -BeLike '*aim-pass*'
+        }
+
+        It 'writes an error naming Password when the password is empty' {
+            Mock Get-AIMCredential -MockWith (New-ProviderMock AIM 'svc-aim' '') -ModuleName $ExtensionModule.Name
+            Get-Secret -Name 'windowsAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*Password*'
+        }
+
+        It 'writes an error with the exception message when Get-AIMCredential throws' {
+            Mock Get-AIMCredential -MockWith { throw 'APPAP004E not found' } -ModuleName $ExtensionModule.Name
+            Get-Secret -Name 'windowsAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*windowsAdmin01*APPAP004E not found*'
+        }
+
         It 'always requests UserName so a PSCredential can be built' {
-            Mock Get-AIMCredential -MockWith {
-                $Result = [PSCustomObject]@{ UserName = 'svc-aim'; Password = 'aim-pass'; Address = 'host2'; Name = 'windowsAdmin01' }
-                $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this.Password | ConvertTo-SecureString -AsPlainText -Force }
-                $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
-                return $Result
-            } -ModuleName $ExtensionModule.Name
+            Mock Get-AIMCredential -MockWith (New-ProviderMock AIM 'svc-aim' 'aim-pass') -ModuleName $ExtensionModule.Name
             $null = Get-Secret -Name 'windowsAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name -ParameterFilter { $RequiredProps -contains 'UserName' }
         }
 
         It 'does not require SafeName and does not pass Safe to Get-AIMCredential when it is not a vault parameter' {
-            Mock Get-AIMCredential -MockWith {
-                $Result = [PSCustomObject]@{ UserName = 'svc-aim'; Password = 'aim-pass' }
-                $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, ('aim-pass' | ConvertTo-SecureString -AsPlainText -Force)) }
-                return $Result
-            } -ModuleName $ExtensionModule.Name
+            Mock Get-AIMCredential -MockWith (New-ProviderMock AIM 'svc-aim' 'aim-pass') -ModuleName $ExtensionModule.Name
             $Secret = Get-Secret -Name 'windowsAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams
             $Secret | Should -BeOfType System.Management.Automation.PSCredential
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $null -eq $Safe }
         }
 
         It 'passes the SafeName vault parameter to Get-AIMCredential as Safe' {
-            Mock Get-AIMCredential -MockWith {
-                $Result = [PSCustomObject]@{ UserName = 'svc-aim'; Password = 'aim-pass' }
-                $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, ('aim-pass' | ConvertTo-SecureString -AsPlainText -Force)) }
-                return $Result
-            } -ModuleName $ExtensionModule.Name
+            Mock Get-AIMCredential -MockWith (New-ProviderMock AIM 'svc-aim' 'aim-pass') -ModuleName $ExtensionModule.Name
             $Secret = Get-Secret -Name 'windowsAdmin01' -VaultName $VaultName -AdditionalParameters ($VaultParams + @{SafeName = 'Windows' })
             $Secret | Should -BeOfType System.Management.Automation.PSCredential
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $Safe -eq 'Windows' }
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 }

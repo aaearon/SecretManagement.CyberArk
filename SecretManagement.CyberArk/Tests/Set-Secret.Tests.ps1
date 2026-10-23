@@ -7,16 +7,13 @@
 }
 
 AfterAll {
-    Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
     Remove-Module $ExtensionModule -Force
 }
 
 Describe 'Set-Secret' {
     Context 'when connection method is REST' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'REST' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
@@ -35,15 +32,10 @@ Describe 'Set-Secret' {
             Should -Invoke -CommandName Add-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 
     Context 'when connection method is REST and Metadata is supplied' {
         BeforeAll {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
             $Plain = 'Zq9-UniqueSecretValue-81!'
             $Sec = ConvertTo-SecureString $Plain -AsPlainText -Force
@@ -81,7 +73,7 @@ Describe 'Set-Secret' {
             $vp = @{ConnectionType = 'REST'; SafeName = 'VSafe'; PlatformId = 'VPlat'; userName = 'vuser' }
             Set-Secret -Name 'n' -Secret $Sec -VaultName $VaultName -AdditionalParameters $vp -Metadata @{ SafeName = 'MSafe' }
             Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
-                $SafeName -eq 'MSafe' -and $platformID -eq 'VPlat' -and $userName -eq 'vuser' -and -not $PSBoundParameters.ContainsKey('address')
+                $SafeName -eq 'MSafe' -and $platformID -eq 'VPlat' -and $userName -eq 'vuser' -and -not $PesterBoundParameters.ContainsKey('address')
             }
         }
 
@@ -124,7 +116,7 @@ Describe 'Set-Secret' {
             $m = $Full + @{ Colour = 'blue'; Owner = 'bob' }
             $out = Set-Secret -Name 'n' -Secret $Sec -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST'; Verbose = $true } -Metadata $m -Verbose -WarningAction Continue *>&1 | Out-String
             Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
-                -not $PSBoundParameters.ContainsKey('Colour') -and -not $PSBoundParameters.ContainsKey('Owner') -and $SafeName -eq 'MSafe'
+                -not $PesterBoundParameters.ContainsKey('Colour') -and -not $PesterBoundParameters.ContainsKey('Owner') -and $SafeName -eq 'MSafe'
             }
             $out | Should -BeLike '*Colour*'
             $out | Should -BeLike '*Owner*'
@@ -134,7 +126,7 @@ Describe 'Set-Secret' {
 
         It 'omits name when no Name is given' {
             Set-Secret -Secret $Sec -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Full
-            Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { -not $PSBoundParameters.ContainsKey('name') }
+            Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { -not $PesterBoundParameters.ContainsKey('name') }
         }
 
         It 'names unknown keys in verbose output on a direct -Verbose call' {
@@ -146,6 +138,52 @@ Describe 'Set-Secret' {
         It 'does not leak the secret in the missing-key error' {
             Set-Secret -Name 'n' -Secret $Sec -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata @{} -ErrorAction SilentlyContinue -ErrorVariable Err -WarningVariable Warn
             "$Err $Warn" | Should -Not -BeLike "*$Plain*"
+        }
+
+        Context 'secret types' {
+            BeforeAll { $Base = @{ SafeName = 'S'; PlatformId = 'P' } }
+
+            It 'converts a string secret to a SecureString' {
+                Set-Secret -Name 'n' -Secret 'plain-pw' -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Base
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
+                    $secret -is [securestring] -and [System.Net.NetworkCredential]::new('', $secret).Password -eq 'plain-pw'
+                }
+            }
+
+            It 'passes a SecureString through' {
+                Set-Secret -Name 'n' -Secret $Sec -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Base
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
+                    $secret -is [securestring] -and [System.Net.NetworkCredential]::new('', $secret).Password -eq $Plain
+                }
+            }
+
+            It 'uses the password of a PSCredential and its UserName when userName is not supplied' {
+                $Cred = [pscredential]::new('cred-user', $Sec)
+                Set-Secret -Name 'n' -Secret $Cred -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Base
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
+                    $secret -is [securestring] -and [System.Net.NetworkCredential]::new('', $secret).Password -eq $Plain -and $userName -eq 'cred-user'
+                }
+            }
+
+            It 'prefers a userName from Metadata over the PSCredential UserName' {
+                $Cred = [pscredential]::new('cred-user', $Sec)
+                Set-Secret -Name 'n' -Secret $Cred -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata ($Base + @{ userName = 'meta-user' })
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $userName -eq 'meta-user' }
+            }
+
+            It 'writes an error without calling Add-PASAccount for an unsupported secret type and never echoes the value' {
+                Set-Secret -Name 'n' -Secret @{ pw = $Plain } -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Base -ErrorAction SilentlyContinue -ErrorVariable Err
+                "$Err" | Should -BeLike '*secret type*'
+                "$Err" | Should -Not -BeLike "*$Plain*"
+                Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+            }
+        }
+
+        It 'writes an error with the exception message and no secret when Add-PASAccount throws' {
+            Mock Add-PASAccount -MockWith { throw 'safe is full' } -ModuleName $ExtensionModule.Name
+            Set-Secret -Name 'n' -Secret $Sec -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Full -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*n*safe is full*'
+            "$Err" | Should -Not -BeLike "*$Plain*"
         }
 
         It 'works when called exactly as SecretManagement calls it' {
@@ -160,30 +198,21 @@ Describe 'Set-Secret' {
             Should -Invoke Add-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $SafeName -eq 'MSafe' -and $secret }
         }
 
-        AfterAll {
-            Unregister-SecretVault -Name $VaultName
-        }
     }
 
     Context 'when connection type is Credential Provider' {
         It 'writes an error' {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CredentialProvider' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Set-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Set-Secret is not supported for Credential Provider*'
-            Unregister-SecretVault -Name $VaultName
         }
     }
 
     Context 'when connection type is Central Credential Provider' {
         It 'writes an error' {
-            Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
             $VaultParams = @{ConnectionType = 'CentralCredentialProvider' }
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Set-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Set-Secret is not supported for Central Credential Provider*'
-            Unregister-SecretVault -Name $VaultName
         }
     }
 }
