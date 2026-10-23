@@ -11,11 +11,17 @@ function Get-Secret {
     switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
             $Credential = Invoke-GetAIMCredential -Name $Name -AdditionalParameters $AdditionalParameters
-            if ($null -ne $Credential) { $Credential = $Credential.ToCredential() }
+            if ($null -ne $Credential) {
+                $Credential = ConvertTo-ProviderCredential -Result $Credential -SecretProperty 'Password' -Name $Name
+                if ($null -eq $Credential) { return }
+            }
         }
         'CentralCredentialProvider' {
             $Credential = Invoke-GetCCPCredential -Name $Name -AdditionalParameters $AdditionalParameters
-            if ($null -ne $Credential) { $Credential = $Credential.ToCredential() }
+            if ($null -ne $Credential) {
+                $Credential = ConvertTo-ProviderCredential -Result $Credential -SecretProperty 'Content' -Name $Name
+                if ($null -eq $Credential) { return }
+            }
         }
 
         'REST' {
@@ -29,7 +35,12 @@ function Get-Secret {
                 }
                 if ($AdditionalParameters.safeName) { $GetPASAccountParameters.Add('safeName', $AdditionalParameters.safeName) }
 
-                $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -eq $Name })
+                try {
+                    $results = @(Get-PASAccount @GetPASAccountParameters | Where-Object { $_.name -eq $Name })
+                } catch {
+                    Write-Error "Failed to look up account '$Name': $($_.Exception.Message)"
+                    return
+                }
 
                 if ($results.Count -eq 0) {
                     return $null
@@ -69,6 +80,26 @@ function Get-Secret {
     }
 
     return $Credential
+}
+
+function ConvertTo-ProviderCredential {
+    # Validates a Get-AIMCredential/Get-CCPCredential result and converts it. Never reports secret values.
+    param ($Result, [string] $SecretProperty, [string] $Name)
+
+    if ([string]::IsNullOrEmpty("$($Result.UserName)")) {
+        Write-Error "The provider returned no UserName for '$Name'; cannot build a credential."
+        return
+    }
+    if ([string]::IsNullOrEmpty("$($Result.$SecretProperty)")) {
+        Write-Error "The provider returned an empty $SecretProperty for '$Name'; cannot build a credential."
+        return
+    }
+    try {
+        return $Result.ToCredential()
+    } catch {
+        Write-Error "Failed to build a credential for '$Name': $($_.Exception.Message)"
+        return
+    }
 }
 
 function Get-SecretInfo {
