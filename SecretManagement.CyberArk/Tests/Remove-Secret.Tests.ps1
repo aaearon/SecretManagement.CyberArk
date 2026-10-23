@@ -23,33 +23,51 @@ Describe 'Remove-Secret' {
             Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
         }
 
-        It 'writes an error when more than one account is found' {
+        It 'throws and does not remove when only substring matches are found' {
             Mock Get-PASAccount -MockWith {
-                $Results = @(
-                    [PSCustomObject]@{
-                        name     = 'localAdmin01'
-                        userName = 'localAdmin01'
-                        Id       = '1'
-                    },
-                    [PSCustomObject]@{
-                        name     = 'localAdmin02'
-                        userName = 'localAdmin02'
-                        Id       = '2'
-                    }
+                @(
+                    [PSCustomObject]@{ name = 'localAdmin01'; userName = 'localAdmin01'; Id = '1' },
+                    [PSCustomObject]@{ name = 'localAdmin02'; userName = 'localAdmin02'; Id = '2' }
                 )
-                return $Results
             } -ModuleName $ExtensionModule.Name
-            Mock Write-Error -MockWith {} -ModuleName $ExtensionModule.Name
-
-            Remove-Secret -Name 'admin' -VaultName $VaultName
-            Should -Invoke -CommandName Write-Error -ModuleName $ExtensionModule.Name
-        }
-
-        It 'removes a secret from the vault' {
             Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName
-            Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name
+            { Remove-Secret -Name 'admin' -VaultName $VaultName } | Should -Throw
+            Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+        }
+
+        It 'throws and does not remove when no accounts are found' {
+            Mock Get-PASAccount -MockWith { $null } -ModuleName $ExtensionModule.Name
+            Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
+
+            { Remove-Secret -Name 'localAdmin01' -VaultName $VaultName } | Should -Throw
+            Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+        }
+
+        It 'throws and does not remove when more than one exact match is found' {
+            Mock Get-PASAccount -MockWith {
+                @(
+                    [PSCustomObject]@{ name = 'localAdmin01'; userName = 'a'; Id = '1' },
+                    [PSCustomObject]@{ name = 'localAdmin01'; userName = 'b'; Id = '2' }
+                )
+            } -ModuleName $ExtensionModule.Name
+            Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
+
+            { Remove-Secret -Name 'localAdmin01' -VaultName $VaultName } | Should -Throw
+            Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
+        }
+
+        It 'removes only the exactly matching account, ignoring case' {
+            Mock Get-PASAccount -MockWith {
+                @(
+                    [PSCustomObject]@{ name = 'localAdmin01'; userName = 'localAdmin01'; Id = '1' },
+                    [PSCustomObject]@{ name = 'localAdmin01-old'; userName = 'localAdmin01'; Id = '2' }
+                )
+            } -ModuleName $ExtensionModule.Name
+            Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
+
+            Remove-Secret -Name 'LOCALADMIN01' -VaultName $VaultName
+            Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $id -eq '1' }
         }
 
         AfterAll {

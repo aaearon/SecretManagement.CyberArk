@@ -105,3 +105,11 @@ Set-Secret -VaultName CyberArk -Secret $Secret -AdditionalParameters $NewCredent
 ```
 
 Note: The value passed to the `Name` argument will be used as the `name` property for the account in CyberArk. If you want CyberArk to generate the name for the account automatically, do not use the `Name` argument. This is not supported for the `CentralCredentialProvider` and `CredentialProvider` connection types.
+
+## Remove-Secret
+
+`Remove-Secret` (REST only) deletes the account whose `name` exactly matches `-Name` (case-insensitive). It throws, and deletes nothing, if there are zero or multiple exact matches; substring matches are ignored.
+
+## Test-SecretVault
+
+`Test-SecretVault` checks the vault per `ConnectionType` without network calls for the Credential Provider types: `REST` requires an existing `PASSession`; `CredentialProvider` requires `AppID` and the `Get-AIMCredential` command; `CentralCredentialProvider` requires `AppID`, `URL` and the `Get-CCPCredential` command. Unsupported types return `$false` with an error.

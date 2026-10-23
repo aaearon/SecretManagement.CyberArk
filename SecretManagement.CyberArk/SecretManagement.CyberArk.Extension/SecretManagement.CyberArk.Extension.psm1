@@ -140,13 +140,15 @@ function Remove-Secret {
         'REST' {
             Test-PASSession
 
-            $results = Get-PASAccount -search "$Name"
+            $results = @(Get-PASAccount -search "$Name" | Where-Object { $PSItem.name -eq $Name })
 
-            if ($results.Count -gt 1) {
-                Write-Error "Multiple matches found with name $Name. Not deleting anything."
-            } else {
-                $results | Remove-PASAccount
+            if ($results.Count -eq 0) {
+                throw "No account found with name $Name. Not deleting anything."
+            } elseif ($results.Count -gt 1) {
+                throw "Multiple accounts found with name $Name. Not deleting anything."
             }
+
+            Remove-PASAccount -id $results[0].Id
         }
         Default {
             throw "ConnectionType $($VaultParameters.ConnectionType) is not supported"
@@ -205,8 +207,24 @@ function Test-SecretVault {
         [hashtable] $AdditionalParameters
     )
 
-    Test-PASSession
-    return $true
+    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
+
+    switch ($VaultParameters.ConnectionType) {
+        'CredentialProvider' {
+            return [bool]($VaultParameters.AppID -and (Get-Command -Name Get-AIMCredential -ErrorAction SilentlyContinue))
+        }
+        'CentralCredentialProvider' {
+            return [bool]($VaultParameters.AppID -and $VaultParameters.URL -and (Get-Command -Name Get-CCPCredential -ErrorAction SilentlyContinue))
+        }
+        'REST' {
+            Test-PASSession
+            return $true
+        }
+        Default {
+            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            return $false
+        }
+    }
 }
 
 function Test-PASSession {
