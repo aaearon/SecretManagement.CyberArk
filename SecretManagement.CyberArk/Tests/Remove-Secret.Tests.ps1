@@ -22,7 +22,8 @@ Describe 'Remove-Secret' {
     Context 'when connection type is REST' {
         BeforeAll {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
+            $VaultParams = @{ConnectionType = 'REST' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
@@ -35,7 +36,7 @@ Describe 'Remove-Secret' {
             } -ModuleName $ExtensionModule.Name
             Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            Remove-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            Remove-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Not deleting anything*'
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
@@ -44,7 +45,7 @@ Describe 'Remove-Secret' {
             Mock Get-PASAccount -MockWith { $null } -ModuleName $ExtensionModule.Name
             Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*No account found*Not deleting anything*'
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
@@ -58,7 +59,7 @@ Describe 'Remove-Secret' {
             } -ModuleName $ExtensionModule.Name
             Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            Remove-Secret -Name 'localAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Multiple accounts*Not deleting anything*'
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
@@ -72,7 +73,7 @@ Describe 'Remove-Secret' {
             } -ModuleName $ExtensionModule.Name
             Mock Remove-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            Remove-Secret -Name 'LOCALADMIN01' -VaultName $VaultName
+            Remove-Secret -Name 'LOCALADMIN01' -VaultName $VaultName -AdditionalParameters $VaultParams
             Should -Invoke -CommandName Remove-PASAccount -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $id -eq '1' }
         }
 
@@ -84,8 +85,9 @@ Describe 'Remove-Secret' {
     Context 'when connection type is Credential Provider' {
         It 'writes an error' {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider' }
-            Remove-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            $VaultParams = @{ConnectionType = 'CredentialProvider' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
+            Remove-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Remove-Secret is not supported for Credential Provider*'
             Unregister-SecretVault -Name $VaultName
         }
@@ -94,8 +96,9 @@ Describe 'Remove-Secret' {
     Context 'when connection type is Central Credential Provider' {
         It 'writes an error' {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider' }
-            Remove-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err
+            $VaultParams = @{ConnectionType = 'CentralCredentialProvider' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
+            Remove-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
             "$Err" | Should -BeLike '*Remove-Secret is not supported for Central Credential Provider*'
             Unregister-SecretVault -Name $VaultName
         }

@@ -9,16 +9,14 @@ function Get-Secret {
         [string] $SafeName
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    switch ($VaultParameters.ConnectionType) {
+    switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
             if ($null -eq $SafeName) { Write-Error 'SafeName is required for the Credential Provider type'; return }
-            $Credential = Invoke-GetAIMCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $Credential = Invoke-GetAIMCredential -Name $Name -AdditionalParameters $AdditionalParameters
             if ($null -ne $Credential) { $Credential = $Credential.ToCredential() }
         }
         'CentralCredentialProvider' {
-            $Credential = Invoke-GetCCPCredential -Name $Name -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $Credential = Invoke-GetCCPCredential -Name $Name -AdditionalParameters $AdditionalParameters
             if ($null -ne $Credential) { $Credential = $Credential.ToCredential() }
         }
 
@@ -67,7 +65,7 @@ function Get-Secret {
         }
 
         default {
-            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
             return
         }
     }
@@ -83,17 +81,15 @@ function Get-SecretInfo {
         [hashtable] $AdditionalParameters
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    switch ($VaultParameters.ConnectionType) {
+    switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
             $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
-            $results = Invoke-GetAIMCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $results = Invoke-GetAIMCredential -Name $Filter -AdditionalParameters $AdditionalParameters
             $results = $results | Select-Object -Property * -ExcludeProperty Password
         }
         'CentralCredentialProvider' {
             $SecretDataType = [Microsoft.PowerShell.SecretManagement.SecretType]::PSCredential
-            $results = Invoke-GetCCPCredential -Name $Filter -VaultName $VaultName -AdditionalParameters $AdditionalParameters
+            $results = Invoke-GetCCPCredential -Name $Filter -AdditionalParameters $AdditionalParameters
             $results = $results | Select-Object -Property * -ExcludeProperty Content
         }
         'REST' {
@@ -103,7 +99,7 @@ function Get-SecretInfo {
             $results = Get-PASAccount -search "$Filter"
         }
         Default {
-            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
             return
         }
     }
@@ -134,9 +130,7 @@ function Remove-Secret {
         [hashtable] $AdditionalParameters
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    switch ($VaultParameters.ConnectionType) {
+    switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
             Write-Error 'Remove-Secret is not supported for Credential Provider'
             return
@@ -161,7 +155,7 @@ function Remove-Secret {
             Remove-PASAccount -id $results[0].Id
         }
         Default {
-            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
             return
         }
     }
@@ -176,9 +170,7 @@ function Set-Secret {
         [hashtable] $AdditionalParameters
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    switch ($VaultParameters.ConnectionType) {
+    switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
             Write-Error 'Set-Secret is not supported for Credential Provider'
             return
@@ -207,7 +199,7 @@ function Set-Secret {
             Add-PASAccount @AddPASAccountParameters
         }
         Default {
-            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
             return
         }
     }
@@ -222,17 +214,15 @@ function Test-SecretVault {
         [hashtable] $AdditionalParameters
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    switch ($VaultParameters.ConnectionType) {
+    switch ($AdditionalParameters.ConnectionType) {
         'CredentialProvider' {
-            if (-not $VaultParameters.AppID) { Write-Error 'CredentialProvider vault parameter AppID is missing'; return $false }
+            if (-not $AdditionalParameters.AppID) { Write-Error 'CredentialProvider vault parameter AppID is missing'; return $false }
             if (-not (Get-Command -Name Get-AIMCredential -ErrorAction SilentlyContinue)) { Write-Error 'Get-AIMCredential command not found'; return $false }
             return $true
         }
         'CentralCredentialProvider' {
-            if (-not $VaultParameters.AppID) { Write-Error 'CentralCredentialProvider vault parameter AppID is missing'; return $false }
-            if (-not $VaultParameters.URL) { Write-Error 'CentralCredentialProvider vault parameter URL is missing'; return $false }
+            if (-not $AdditionalParameters.AppID) { Write-Error 'CentralCredentialProvider vault parameter AppID is missing'; return $false }
+            if (-not $AdditionalParameters.URL) { Write-Error 'CentralCredentialProvider vault parameter URL is missing'; return $false }
             if (-not (Get-Command -Name Get-CCPCredential -ErrorAction SilentlyContinue)) { Write-Error 'Get-CCPCredential command not found'; return $false }
             return $true
         }
@@ -240,7 +230,7 @@ function Test-SecretVault {
             return (Test-PASSession)
         }
         Default {
-            Write-Error "ConnectionType $($VaultParameters.ConnectionType) is not supported"
+            Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
             return $false
         }
     }
@@ -260,24 +250,31 @@ function Invoke-GetCCPCredential {
     [CmdletBinding()]
     param (
         [string] $Name,
-        [string] $VaultName,
         [hashtable] $AdditionalParameters
     )
 
-    if ($null -ne $VaultName) {
-        $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-    }
-    else {
-        $VaultParameters = (Get-SecretVault).VaultParameters
-    }
-    if ($null -eq $VaultParameters) {
-        Write-Error 'No vault parameters!'
-        return
-    }
+    # Vault-level, JSON-persistable Get-CCPCredential connection settings (CredentialRetriever 4.0.0).
+    # Credential/Certificate cannot survive VaultParameters persistence; Safe/Folder/UserName/Address/Database/
+    # PolicyID/Query/QueryFormat/Reason identify a secret; AsCredential/AsSecureString would change the return type.
+    $AllowedKeys = @(
+        'AppID', 'URL', 'SkipCertificateCheck', 'UseDefaultCredentials', 'CertificateThumbPrint',
+        'WebServiceName', 'ConnectionTimeout', 'Method', 'FailRequestOnPasswordChange'
+    )
+    $SilentKeys = @('ConnectionType', 'Verbose')
 
-    $GetCCPCredentialParameters = [System.Collections.Hashtable]::new($VaultParameters)
-    $GetCCPCredentialParameters.Remove("ConnectionType")
-    $GetCCPCredentialParameters.Add("Object", $Name)
+    $GetCCPCredentialParameters = @{}
+    $IgnoredKeys = @()
+    foreach ($Key in $AdditionalParameters.Keys) {
+        if ($Key -in $AllowedKeys) {
+            $GetCCPCredentialParameters[($AllowedKeys | Where-Object { $_ -eq $Key })] = $AdditionalParameters[$Key]
+        } elseif ($Key -notin $SilentKeys) {
+            $IgnoredKeys += $Key
+        }
+    }
+    if ($IgnoredKeys) {
+        Write-Warning "Ignoring unsupported vault parameter(s) for CentralCredentialProvider: $($IgnoredKeys -join ', ')"
+    }
+    $GetCCPCredentialParameters.Add('Object', $Name)
 
     $Credential = Get-CCPCredential @GetCCPCredentialParameters
     return $Credential
@@ -288,16 +285,13 @@ function Invoke-GetAIMCredential {
     param (
         [string] $Name,
         [string] $SafeName,
-        [string] $VaultName,
         [hashtable] $AdditionalParameters
     )
 
-    $VaultParameters = (Get-SecretVault -Name $VaultName).VaultParameters
-
-    if ($VaultParameters.ClientPath) { Set-AIMConfiguration -ClientPath $VaultParameters.ClientPath }
+    if ($AdditionalParameters.ClientPath) { Set-AIMConfiguration -ClientPath $AdditionalParameters.ClientPath }
 
     $GetAIMCredentialParameters = @{
-        AppID    = $VaultParameters.AppID
+        AppID    = $AdditionalParameters.AppID
         UserName = $Name
     }
     if ($SafeName) { $GetAIMCredentialParameters.Add('SafeName', $SafeName) }

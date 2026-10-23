@@ -16,7 +16,8 @@ Describe 'Get-Secret' {
     Context 'when connection type is REST' {
         BeforeAll {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
+            $VaultParams = @{ConnectionType = 'REST' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
         It 'should return a <PSType> for <SecretName>' {
@@ -36,7 +37,7 @@ Describe 'Get-Secret' {
                 }
             } -ModuleName $ExtensionModule.Name
 
-            $Secret = Get-Secret -Name $SecretName -VaultName $VaultName
+            $Secret = Get-Secret -Name $SecretName -VaultName $VaultName -AdditionalParameters $VaultParams
             $Secret | Should -Not -BeNullOrEmpty
             $Secret | Should -BeOfType $PSType
         } -TestCases (
@@ -59,7 +60,7 @@ Describe 'Get-Secret' {
                     )
                 } -ModuleName $ExtensionModule.Name
 
-                Get-Secret -Name 'admin' -VaultName $VaultName | Should -BeNullOrEmpty
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams | Should -BeNullOrEmpty
                 Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
             }
 
@@ -71,7 +72,7 @@ Describe 'Get-Secret' {
                     )
                 } -ModuleName $ExtensionModule.Name
 
-                Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err -WarningAction SilentlyContinue -WarningVariable Warn | Should -BeNullOrEmpty
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err -WarningAction SilentlyContinue -WarningVariable Warn | Should -BeNullOrEmpty
                 "$Err" | Should -BeLike '*2*admin*'
                 $Warn | Should -BeNullOrEmpty
                 Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 0 -Exactly
@@ -86,7 +87,7 @@ Describe 'Get-Secret' {
                     )
                 } -ModuleName $ExtensionModule.Name
 
-                Get-Secret -Name 'admin' -VaultName $VaultName | Should -BeOfType System.Management.Automation.PSCredential
+                Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams | Should -BeOfType System.Management.Automation.PSCredential
                 Should -Invoke -CommandName Get-PASAccountPassword -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter { $AccountId -eq '2' }
             }
         }
@@ -95,7 +96,7 @@ Describe 'Get-Secret' {
             Mock Get-PASAccount -MockWith { [PSCustomObject]@{ name = 'admin'; userName = 'admin'; Id = '1' } } -ModuleName $ExtensionModule.Name
             Mock Get-PASAccountPassword -MockWith { throw 'access denied by policy' } -ModuleName $ExtensionModule.Name
 
-            Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
             "$Err" | Should -BeLike '*admin*access denied by policy*'
         }
 
@@ -103,7 +104,7 @@ Describe 'Get-Secret' {
             Mock Get-PASSession -MockWith { throw 'no session' } -ModuleName $ExtensionModule.Name
             Mock Get-PASAccount -MockWith {} -ModuleName $ExtensionModule.Name
 
-            Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
             "$Err" | Should -BeLike '*Failed to get PASSession*'
             Should -Invoke -CommandName Get-PASAccount -ModuleName $ExtensionModule.Name -Times 0 -Exactly
         }
@@ -119,8 +120,9 @@ Describe 'Get-Secret' {
     Context 'when connection type is unknown' {
         It 'writes an error' {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'Bogus' }
-            Get-Secret -Name 'admin' -VaultName $VaultName -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            $VaultParams = @{ConnectionType = 'Bogus' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
             "$Err" | Should -BeLike '*ConnectionType Bogus is not supported*'
             Unregister-SecretVault -Name $VaultName
         }
@@ -131,7 +133,8 @@ Describe 'Get-Secret' {
 
         BeforeAll {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com' }
+            $VaultParams = @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-CCPCredential' {
@@ -141,11 +144,68 @@ Describe 'Get-Secret' {
                 $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
                 return $Result
             } -ModuleName $ExtensionModule.Name
-            $Secret = Get-Secret -Name 'admin' -VaultName $VaultName
+            $Secret = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams
             Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name
             $Secret | Should -BeOfType System.Management.Automation.PSCredential
             $Secret.UserName | Should -Be 'svc-ccp'
             $Secret.GetNetworkCredential().Password | Should -Be 'ccp-pass'
+        }
+
+        Context 'vault parameter allowlist' {
+            BeforeEach {
+                Mock Get-CCPCredential -MockWith {
+                    $Result = [PSCustomObject]@{ UserName = 'svc-ccp'; Content = 'ccp-pass'; Name = 'admin' }
+                    $Result | Add-Member -MemberType ScriptMethod -Name 'ToSecureString' -Value { $this.Content | ConvertTo-SecureString -AsPlainText -Force }
+                    $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
+                    return $Result
+                } -ModuleName $ExtensionModule.Name
+            }
+
+            It 'passes allowed connection settings and the object name' {
+                $Params = @{
+                    ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'
+                    SkipCertificateCheck = $true; UseDefaultCredentials = $true; CertificateThumbPrint = 'ABC123'
+                    WebServiceName = 'AIMWebService'; ConnectionTimeout = 30; Method = 'GET'; FailRequestOnPasswordChange = $true
+                }
+                $null = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $Params -WarningVariable Warn -WarningAction SilentlyContinue
+                $Warn | Should -BeNullOrEmpty
+                Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
+                    $AppID -eq 'banana' -and $URL -eq 'https://banana.com' -and $SkipCertificateCheck -and $UseDefaultCredentials -and
+                    $CertificateThumbPrint -eq 'ABC123' -and $WebServiceName -eq 'AIMWebService' -and $ConnectionTimeout -eq 30 -and
+                    $Method -eq 'GET' -and $FailRequestOnPasswordChange -and $Object -eq 'admin'
+                }
+            }
+
+            It 'ignores Verbose silently and warns about unknown keys, naming only the keys' {
+                $Params = @{
+                    ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'; Verbose = $false
+                    Bogus = 'sekrit-value'; Safe = 'sekrit-safe'; AsCredential = $true
+                }
+                $null = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $Params -WarningVariable Warn -WarningAction SilentlyContinue
+                "$Warn" | Should -BeLike '*Bogus*'
+                "$Warn" | Should -BeLike '*Safe*'
+                "$Warn" | Should -BeLike '*AsCredential*'
+                "$Warn" | Should -Not -BeLike '*sekrit*'
+                "$Warn" | Should -Not -BeLike '*ConnectionType*'
+                "$Warn" | Should -Not -BeLike '*Verbose*'
+                Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
+                    -not $PSBoundParameters.ContainsKey('Bogus') -and -not $PSBoundParameters.ContainsKey('Safe') -and
+                    -not $PSBoundParameters.ContainsKey('AsCredential') -and $AppID -eq 'banana'
+                }
+            }
+
+            It 'does not pass Credential or Certificate and warns about them' {
+                $Params = @{
+                    ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'
+                    Credential = @{ UserName = 'u' }; Certificate = @{ Subject = 'cn=x' }
+                }
+                $null = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $Params -WarningVariable Warn -WarningAction SilentlyContinue
+                "$Warn" | Should -BeLike '*Credential*'
+                "$Warn" | Should -BeLike '*Certificate*'
+                Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name -Times 1 -Exactly -ParameterFilter {
+                    -not $PSBoundParameters.ContainsKey('Credential') -and -not $PSBoundParameters.ContainsKey('Certificate')
+                }
+            }
         }
 
         AfterAll {
@@ -156,7 +216,8 @@ Describe 'Get-Secret' {
     Context 'when connection type is Credential Provder' {
         BeforeAll {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider'; AppID = 'banana' }
+            $VaultParams = @{ConnectionType = 'CredentialProvider'; AppID = 'banana' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-AIMCredential' {
@@ -166,7 +227,7 @@ Describe 'Get-Secret' {
                 $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
                 return $Result
             } -ModuleName $ExtensionModule.Name
-            $Secret = Get-Secret -Name 'windowsAdmin01' -SafeName 'Windows' -VaultName $VaultName
+            $Secret = Get-Secret -Name 'windowsAdmin01' -SafeName 'Windows' -VaultName $VaultName -AdditionalParameters $VaultParams
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name
             $Secret | Should -BeOfType System.Management.Automation.PSCredential
             $Secret.UserName | Should -Be 'svc-aim'
@@ -180,7 +241,7 @@ Describe 'Get-Secret' {
                 $Result | Add-Member -MemberType ScriptMethod -Name 'ToCredential' -Value { New-Object System.Management.Automation.PSCredential($this.UserName, $this.ToSecureString()) }
                 return $Result
             } -ModuleName $ExtensionModule.Name
-            $null = Get-Secret -Name 'windowsAdmin01' -SafeName 'Windows' -VaultName $VaultName
+            $null = Get-Secret -Name 'windowsAdmin01' -SafeName 'Windows' -VaultName $VaultName -AdditionalParameters $VaultParams
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name -ParameterFilter { $RequiredProps -contains 'UserName' }
         }
 

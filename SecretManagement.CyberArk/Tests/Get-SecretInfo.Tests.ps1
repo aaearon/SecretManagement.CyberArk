@@ -26,12 +26,13 @@ Describe 'Get-SecretInfo' {
 
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
 
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'REST' }
+            $VaultParams = @{ConnectionType = 'REST' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
             Mock Get-PASSession -MockWith { [PSCustomObject]@{ BaseURI = 'https://pvwa' } } -ModuleName $ExtensionModule.Name
         }
 
         It 'returns information on a secret' {
-            $SecretInfo = Get-SecretInfo -Filter 'localAdmin01' -VaultName $VaultName
+            $SecretInfo = Get-SecretInfo -Filter 'localAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams
             $SecretInfo | Should -Not -BeNullOrEmpty
             $SecretInfo | Should -BeOfType [Microsoft.PowerShell.SecretManagement.SecretInformation]
             $SecretInfo.Name | Should -Be 'localAdmin01'
@@ -47,14 +48,15 @@ Describe 'Get-SecretInfo' {
     Context 'when connection type is Central Credential Provder' {
         BeforeAll {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com' }
+            $VaultParams = @{ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-CCPCredential' {
             Mock Get-CCPCredential -MockWith {
                 [PSCustomObject]@{ UserName = 'svc-ccp'; Content = 'ccp-pass'; Address = 'host1'; Name = 'admin' }
             } -ModuleName $ExtensionModule.Name
-            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName
+            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams
             Should -Invoke -CommandName Get-CCPCredential -ModuleName $ExtensionModule.Name
             $Info.Type | Should -Be 'PSCredential'
             $Info.Name | Should -Be 'admin'
@@ -69,14 +71,15 @@ Describe 'Get-SecretInfo' {
     Context 'when connection type is Credential Provder' {
         BeforeAll {
             Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue | Unregister-SecretVault
-            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters @{ConnectionType = 'CredentialProvider'; AppID = 'banana' }
+            $VaultParams = @{ConnectionType = 'CredentialProvider'; AppID = 'banana' }
+            Register-SecretVault -Name $VaultName -ModuleName SecretManagement.CyberArk -VaultParameters $VaultParams
         }
 
         It 'invokes Get-AIMCredential' {
             Mock Get-AIMCredential -MockWith {
                 [PSCustomObject]@{ UserName = 'svc-aim'; Password = 'aim-pass'; Address = 'host2'; Name = 'admin' }
             } -ModuleName $ExtensionModule.Name
-            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName
+            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams
             Should -Invoke -CommandName Get-AIMCredential -ModuleName $ExtensionModule.Name
             $Info.Type | Should -Be 'PSCredential'
             $Info.Name | Should -Be 'admin'
