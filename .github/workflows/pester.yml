@@ -5,18 +5,23 @@ jobs:
     name: Run Pester tests
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-2019, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Installs dependencies
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck
           Install-Module psPAS, CredentialRetriever, Microsoft.PowerShell.SecretManagement
       - name: Executes Pester tests
         shell: pwsh
         run: |
+          Import-Module Pester -MinimumVersion 5.0.0
           Import-Module Microsoft.PowerShell.SecretManagement -Force
-          Invoke-Pester ./SecretManagement.CyberArk/Tests/*.Tests.ps1 -Passthru
+          $config = New-PesterConfiguration
+          $config.Run.Path = './SecretManagement.CyberArk/Tests'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
