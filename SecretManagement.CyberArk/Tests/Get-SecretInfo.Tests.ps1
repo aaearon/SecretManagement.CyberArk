@@ -129,6 +129,13 @@ Describe 'Get-SecretInfo' {
             $Info.Metadata.Keys | Should -Not -Contain 'Content'
         }
 
+        It 'writes an error with the exception message when Get-CCPCredential throws' {
+            Mock Get-CCPCredential -MockWith { throw 'ccp exploded' } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
+            $Info | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*admin*ccp exploded*'
+        }
+
         It 'returns only allowed metadata keys with allowed types' {
             Mock Get-CCPCredential -MockWith {
                 [PSCustomObject]@{ Content = 'sekrit'; Name = 'admin'; UserName = 'svc'; Address = 'host'; Safe = 'S'; Folder = 'Root'; PolicyID = 'Pol'; DeviceType = 'Operating System'
@@ -174,6 +181,13 @@ Describe 'Get-SecretInfo' {
             $Info.Type | Should -Be 'PSCredential'
             $Info.Name | Should -Be 'admin'
             $Info.Metadata.Keys | Should -Not -Contain 'Password'
+        }
+
+        It 'writes an error with the exception message when Get-AIMCredential throws' {
+            Mock Get-AIMCredential -MockWith { throw 'aim exploded' } -ModuleName $ExtensionModule.Name
+            $Info = Get-SecretInfo -Filter 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err
+            $Info | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*admin*aim exploded*'
         }
 
         It 'passes the SafeName vault parameter to Get-AIMCredential as Safe' {

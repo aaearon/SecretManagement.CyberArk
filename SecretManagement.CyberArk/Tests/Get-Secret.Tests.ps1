@@ -203,6 +203,12 @@ Describe 'Get-Secret' {
             "$Err" | Should -BeLike '*Content*'
         }
 
+        It 'writes an error with the exception message when Get-CCPCredential throws' {
+            Mock Get-CCPCredential -MockWith { throw 'CCP timed out' } -ModuleName $ExtensionModule.Name
+            Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*admin*CCP timed out*'
+        }
+
         Context 'vault parameter allowlist' {
             BeforeEach {
                 Mock Get-CCPCredential -MockWith (New-ProviderMock CCP 'svc-ccp' 'ccp-pass') -ModuleName $ExtensionModule.Name
@@ -308,6 +314,12 @@ Describe 'Get-Secret' {
             Mock Get-AIMCredential -MockWith (New-ProviderMock AIM 'svc-aim' '') -ModuleName $ExtensionModule.Name
             Get-Secret -Name 'windowsAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
             "$Err" | Should -BeLike '*Password*'
+        }
+
+        It 'writes an error with the exception message when Get-AIMCredential throws' {
+            Mock Get-AIMCredential -MockWith { throw 'APPAP004E not found' } -ModuleName $ExtensionModule.Name
+            Get-Secret -Name 'windowsAdmin01' -VaultName $VaultName -AdditionalParameters $VaultParams -ErrorAction SilentlyContinue -ErrorVariable Err | Should -BeNullOrEmpty
+            "$Err" | Should -BeLike '*windowsAdmin01*APPAP004E not found*'
         }
 
         It 'always requests UserName so a PSCredential can be built' {

@@ -296,7 +296,12 @@ function Set-Secret {
             if ($Resolved.ContainsKey('address')) { $AddPASAccountParameters.Add('address', $Resolved.address) }
             if ($SecretValue) { $AddPASAccountParameters.Add('secret', $SecretValue) }
 
-            Add-PASAccount @AddPASAccountParameters
+            try {
+                Add-PASAccount @AddPASAccountParameters
+            } catch {
+                Write-Error "Failed to add account '$Name': $($_.Exception.Message)"
+                return
+            }
         }
         Default {
             Write-Error "ConnectionType $($AdditionalParameters.ConnectionType) is not supported"
@@ -404,7 +409,12 @@ function Invoke-GetCCPCredential {
     }
     $GetCCPCredentialParameters.Add('Object', $Name)
 
-    $Credential = Get-CCPCredential @GetCCPCredentialParameters
+    try {
+        $Credential = Get-CCPCredential @GetCCPCredentialParameters
+    } catch {
+        Write-Error "Failed to retrieve '$Name' from the Central Credential Provider: $($_.Exception.Message)"
+        return
+    }
     return $Credential
 }
 
@@ -415,18 +425,23 @@ function Invoke-GetAIMCredential {
         [hashtable] $AdditionalParameters
     )
 
-    if ($AdditionalParameters.ClientPath) { Set-AIMConfiguration -ClientPath $AdditionalParameters.ClientPath }
+    try {
+        if ($AdditionalParameters.ClientPath) { Set-AIMConfiguration -ClientPath $AdditionalParameters.ClientPath }
 
-    $GetAIMCredentialParameters = @{
-        AppID    = $AdditionalParameters.AppID
-        UserName = $Name
+        $GetAIMCredentialParameters = @{
+            AppID    = $AdditionalParameters.AppID
+            UserName = $Name
+        }
+        # Optional vault-level scope; Get-AIMCredential's parameter is named Safe
+        if ($AdditionalParameters.SafeName) { $GetAIMCredentialParameters.Add('Safe', $AdditionalParameters.SafeName) }
+        # UserName is always requested so a PSCredential can be built
+        $RequiredProps = @($AdditionalParameters.RequiredProps) + 'UserName' | Where-Object { $_ } | Select-Object -Unique
+        $GetAIMCredentialParameters.Add('RequiredProps', $RequiredProps)
+
+        $Credential = Get-AIMCredential @GetAIMCredentialParameters
+    } catch {
+        Write-Error "Failed to retrieve '$Name' from the Credential Provider: $($_.Exception.Message)"
+        return
     }
-    # Optional vault-level scope; Get-AIMCredential's parameter is named Safe
-    if ($AdditionalParameters.SafeName) { $GetAIMCredentialParameters.Add('Safe', $AdditionalParameters.SafeName) }
-    # UserName is always requested so a PSCredential can be built
-    $RequiredProps = @($AdditionalParameters.RequiredProps) + 'UserName' | Where-Object { $_ } | Select-Object -Unique
-    $GetAIMCredentialParameters.Add('RequiredProps', $RequiredProps)
-
-    $Credential = Get-AIMCredential @GetAIMCredentialParameters
     return $Credential
 }

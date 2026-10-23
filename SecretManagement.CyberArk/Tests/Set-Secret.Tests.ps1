@@ -187,6 +187,13 @@ Describe 'Set-Secret' {
             }
         }
 
+        It 'writes an error with the exception message and no secret when Add-PASAccount throws' {
+            Mock Add-PASAccount -MockWith { throw 'safe is full' } -ModuleName $ExtensionModule.Name
+            Set-Secret -Name 'n' -Secret $Sec -VaultName $VaultName -AdditionalParameters @{ConnectionType = 'REST' } -Metadata $Full -ErrorAction SilentlyContinue -ErrorVariable Err
+            "$Err" | Should -BeLike '*n*safe is full*'
+            "$Err" | Should -Not -BeLike "*$Plain*"
+        }
+
         It 'works when called exactly as SecretManagement calls it' {
             $params = @{
                 Name                 = 'n'
