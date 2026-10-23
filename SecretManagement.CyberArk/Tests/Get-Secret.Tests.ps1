@@ -215,6 +215,27 @@ Describe 'Get-Secret' {
                 }
             }
 
+            It 'omits switch parameters whose value is false so Get-CCPCredential does not see them bound' {
+                Mock Get-CCPCredential -MockWith ([scriptblock]::Create('$global:CCPBound = @($(if ($null -ne $___BoundParameters___) { $___BoundParameters___ } else { $PSBoundParameters }).Keys);' + (New-ProviderMock CCP 'svc-ccp' 'ccp-pass').ToString())) -ModuleName $ExtensionModule.Name
+                $Params = @{
+                    ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'
+                    UseDefaultCredentials = $false; SkipCertificateCheck = $false; FailRequestOnPasswordChange = $false
+                }
+                $null = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $Params
+                $global:CCPBound | Should -Contain 'AppID'
+                $global:CCPBound | Should -Not -Contain 'UseDefaultCredentials'
+                $global:CCPBound | Should -Not -Contain 'SkipCertificateCheck'
+                $global:CCPBound | Should -Not -Contain 'FailRequestOnPasswordChange'
+            }
+
+            It 'treats the string "false" as false and "true" as true for switch parameters' {
+                Mock Get-CCPCredential -MockWith ([scriptblock]::Create('$global:CCPBound = @($(if ($null -ne $___BoundParameters___) { $___BoundParameters___ } else { $PSBoundParameters }).Keys);' + (New-ProviderMock CCP 'svc-ccp' 'ccp-pass').ToString())) -ModuleName $ExtensionModule.Name
+                $Params = @{ ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'; UseDefaultCredentials = 'false'; SkipCertificateCheck = 'true' }
+                $null = Get-Secret -Name 'admin' -VaultName $VaultName -AdditionalParameters $Params
+                $global:CCPBound | Should -Not -Contain 'UseDefaultCredentials'
+                $global:CCPBound | Should -Contain 'SkipCertificateCheck'
+            }
+
             It 'ignores Verbose silently and warns about unknown keys, naming only the keys' {
                 $Params = @{
                     ConnectionType = 'CentralCredentialProvider'; AppID = 'banana'; URL = 'https://banana.com'; Verbose = $false

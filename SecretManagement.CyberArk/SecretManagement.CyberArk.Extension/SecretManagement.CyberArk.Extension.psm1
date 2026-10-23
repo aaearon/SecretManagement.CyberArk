@@ -352,12 +352,23 @@ function Invoke-GetCCPCredential {
         'WebServiceName', 'ConnectionTimeout', 'Method', 'FailRequestOnPasswordChange'
     )
     $SilentKeys = @('ConnectionType', 'Verbose')
+    # Get-CCPCredential acts on a switch being bound, even as $false (UseDefaultCredentials would send OS credentials),
+    # so switches are passed only when truthy.
+    $SwitchKeys = @('SkipCertificateCheck', 'UseDefaultCredentials', 'FailRequestOnPasswordChange')
 
     $GetCCPCredentialParameters = @{}
     $IgnoredKeys = @()
     foreach ($Key in $AdditionalParameters.Keys) {
         if ($Key -in $AllowedKeys) {
-            $GetCCPCredentialParameters[($AllowedKeys | Where-Object { $_ -eq $Key })] = $AdditionalParameters[$Key]
+            $CanonicalKey = $AllowedKeys | Where-Object { $_ -eq $Key }
+            $Value = $AdditionalParameters[$Key]
+            if ($CanonicalKey -in $SwitchKeys) {
+                $Parsed = $false
+                if ($Value -is [string] -and [bool]::TryParse($Value, [ref]$Parsed)) { $Value = $Parsed }
+                if (-not $Value) { continue }
+                $Value = $true
+            }
+            $GetCCPCredentialParameters[$CanonicalKey] = $Value
         } elseif ($Key -notin $SilentKeys) {
             $IgnoredKeys += $Key
         }
