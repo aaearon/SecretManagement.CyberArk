@@ -139,7 +139,11 @@ function Get-SecretInfo {
             $Keys = $RestKeys
 
             # Search with the longest non-wildcard fragment, then apply the real wildcard match locally.
-            $SearchText = [regex]::Split($Filter, '[*?\[\]]') | Sort-Object -Property Length -Descending | Select-Object -First 1
+            # Character classes and backtick escapes make the literal fragments unreliable, so skip the prefilter then.
+            $SearchText = $null
+            if ($Filter -notmatch '[\[`]') {
+                $SearchText = [regex]::Split($Filter, '[*?\[\]]') | Sort-Object -Property Length -Descending | Select-Object -First 1
+            }
             $GetPASAccountParameters = @{}
             if ($SearchText) { $GetPASAccountParameters.search = $SearchText }
             $VaultSafe = Get-CaseInsensitiveValue -Table $AdditionalParameters -Key 'safeName'

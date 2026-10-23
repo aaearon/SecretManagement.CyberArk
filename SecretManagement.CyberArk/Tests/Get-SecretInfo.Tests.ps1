@@ -102,6 +102,20 @@ Describe 'Get-SecretInfo' {
                 $Info | Should -BeNullOrEmpty
             }
 
+            It 'does not prefilter with -search when the filter has a [ character class, and still matches' {
+                Mock Get-PASAccount -MockWith ([scriptblock]::Create('$global:PASBound = @($(if ($null -ne $___BoundParameters___) { $___BoundParameters___ } else { $PSBoundParameters }).Keys); @([PSCustomObject]@{ id = "1"; name = "abz" }, [PSCustomObject]@{ id = "2"; name = "bc" })')) -ModuleName $ExtensionModule.Name
+                $Info = @(Get-SecretInfo -Filter 'a[bc]z' -VaultName $VaultName -AdditionalParameters $VaultParams)
+                $Info.Name | Should -Be 'abz'
+                $global:PASBound | Should -Not -Contain 'search'
+            }
+
+            It 'does not prefilter with -search when the filter has an escaped wildcard, and matches it literally' {
+                Mock Get-PASAccount -MockWith ([scriptblock]::Create('$global:PASBound = @($(if ($null -ne $___BoundParameters___) { $___BoundParameters___ } else { $PSBoundParameters }).Keys); @([PSCustomObject]@{ id = "1"; name = "foo*bar" }, [PSCustomObject]@{ id = "2"; name = "fooXbar" })')) -ModuleName $ExtensionModule.Name
+                $Info = @(Get-SecretInfo -Filter 'foo`*bar' -VaultName $VaultName -AdditionalParameters $VaultParams)
+                $Info.Name | Should -Be 'foo*bar'
+                $global:PASBound | Should -Not -Contain 'search'
+            }
+
             It 'supports ? wildcards' {
                 @(Get-SecretInfo -Filter 'localAdmin0?' -VaultName $VaultName -AdditionalParameters $VaultParams).Count | Should -Be 2
             }
